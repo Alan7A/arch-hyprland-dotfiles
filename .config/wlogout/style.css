@@ -1,0 +1,87 @@
+/*
+
+██╗    ██╗██╗      ██████╗  ██████╗  ██████╗ ██╗   ██╗████████╗
+██║    ██║██║     ██╔═══██╗██╔════╝ ██╔═══██╗██║   ██║╚══██╔══╝
+██║ █╗ ██║██║     ██║   ██║██║  ███╗██║   ██║██║   ██║   ██║   
+██║███╗██║██║     ██║   ██║██║   ██║██║   ██║██║   ██║   ██║   
+╚███╔███╔╝███████╗╚██████╔╝╚██████╔╝╚██████╔╝╚██████╔╝   ██║   
+ ╚══╝╚══╝ ╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝  ╚═════╝    ╚═╝   
+
+WLogout Config File by Arfan Zubi
+
+*/
+
+window {
+  color: #a9b1d6;
+  background-color: rgba(26, 27, 38, 0.7);
+  font-family: "Fira Sans Semi-Light", sans-serif;
+  font-weight: bold;
+  font-size: 24px;
+}
+
+button {
+  margin: 5px;
+  color: #a9b1d6;
+  background-color: #1a1b26;
+  background-size: 20%;
+  background-repeat: no-repeat;
+  background-position: center;
+  border: 5px solid #414868;
+  border-radius: 15px;
+  box-shadow: none;
+  text-shadow: none;
+  opacity: 0.9;
+  transition: background-color 0.2s ease-in-out;
+}
+
+button:focus,
+button:active,
+button:hover {
+  color: #2d353b;
+  background-color: #7aa2f7;
+  text-shadow: none;
+}
+
+#lock {
+  background-image: image(url("./icons/lock.svg"));
+}
+#lock:hover,
+#lock:focus {
+  background-image: image(url("./icons/lock-hover.svg"));
+}
+
+#logout {
+  background-image: image(url("./icons/logout.svg"));
+}
+#logout:hover,
+#logout:focus {
+  background-image: image(url("./icons/logout-hover.svg"));
+}
+
+#suspend {
+  background-image: image(url("./icons/suspend.svg"));
+}
+#suspend:hover,
+#suspend:focus {
+  background-image: image(url("./icons/suspend-hover.svg"));
+}
+
+#hibernate {
+  background-image: image(url("./icons/hibernate.svg"));
+}
+
+#shutdown {
+  background-image: image(url("./icons/shutdown.svg"));
+}
+#shutdown:hover,
+#shutdown:focus {
+  background-image: image(url("./icons/shutdown-hover.svg"));
+}
+
+#reboot {
+  background-image: image(url("./icons/reboot.svg"));
+}
+#reboot:hover,
+#reboot:focus {
+  background-image: image(url("./icons/reboot-hover.svg"));
+}
