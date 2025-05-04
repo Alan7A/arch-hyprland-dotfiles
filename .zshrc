@@ -109,14 +109,14 @@ source $ZSH/oh-my-zsh.sh
 alias aws="/usr/local/bin/aws"
 alias xampp="sudo /opt/lampp/lampp start"
 alias xampp_stop="sudo /opt/lampp/lampp stop"
-alias up="sudo dnf up && flatpak update"
+alias up="paru -Syu; flatpak update"
 alias emulator="~/Android/Sdk/emulator/emulator -avd Medium_Phone_API_34"
-alias cdtrade="cd ~/Documents/Trade"
 alias switchjava="sudo alternatives --config java"
 alias ga="git add ."
 alias gc="git commit"
 alias gca="git commit --amend --no-edit --no-verify"
 alias gp="git push"
+alias yay="paru"
 
 # React Native Environment Variables
 export ANDROID_SDK_ROOT=/home/alan7a/Android/Sdk
