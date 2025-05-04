@@ -1,0 +1,214 @@
+:root {
+  --footer-player-background: #1a1b26;
+  --sidebar-background: #1a1b26;
+  --sidebar-hover-background: #414868;
+  --sidebar-menu-top-text: #565f89;
+  --sidebar-menu-playlist-text: #565f89;
+  --search-background: #1a1b26;
+  --main-background: #16161e;
+  --main-navigation-control-background: #1a1b26;
+  --main-feed-button-background: #1a1b26;
+  --player-control-background: #24283b;
+  --player-control-active-button: #7aa2f7;
+  --player-progress-bar: #ff9e64;
+  --indicator-hifi-background: #9ece6a;
+  --indicator-hifi-span: #1a1b26;
+  --player-control-favorite: #f7768e;
+  --search-dialog-background: #24283b;
+  --right-queue-background: #24283b;
+  --wave-color-solid-accent-fill: #7aa2f7;
+  --wave-color-solid-accent-dark: #78a0f79c;
+  --wave-color-opacity-base-brighter-ultra-thick: #1a1b26cc;
+  --wave-color-solid-base-brighter: #1a1b26;
+  --wave-color-solid-base-brightest: #2d2e38;
+}
+#main {
+  background-color: var(--main-background);
+}
+#footerPlayer {
+  background-color: var(--footer-player-background);
+}
+#sidebar {
+  background-color: var(--sidebar-background);
+  contain: strict;
+  flex-grow: 1;
+  overflow-y: auto;
+}
+#nativeRange {
+  background-color: var(--sidebar-background);
+}
+.item--buEQw:hover {
+  background-color: var(--sidebar-hover-background);
+}
+
+.main--jxfcQ {
+  background-color: var(--main-background);
+}
+button.button--yO9Cd {
+  background-color: var(--main-navigation-control-background);
+}
+.player--gAOQG.lossLess--ON3FI button.withBackground[aria-checked="true"] path {
+  fill: var(--player-control-active-button);
+}
+.player--gAOQG.lossLess--ON3FI button.withBackground[aria-checked="true"] {
+  background-color: var(--player-control-background);
+}
+.activeItem--kFIk0
+  .activeItem--kFIk0
+  .playlistItem--mQrxp
+  .section--PSIay.playingItem--eWkYS {
+  color: #565f89;
+}
+.progressBarWrapper--IBBI9 {
+  color: var(--player-progress-bar);
+}
+.playbackControls--FhKVf button .tidal-ui__icon {
+  transform: scale(1);
+}
+.css-11m9iw3 {
+  background-color: var(--indicator-hifi-background);
+}
+.css-11m9iw3 span {
+  color: var(--indicator-hifi-span);
+}
+.activeItem--kFIk0 {
+  color: var(--sidebar-menu-top-text);
+}
+.activeItem--kFIk0 .playlistItem--mQrxp {
+  color: var(--sidebar-menu-playlist-text);
+}
+button.feedBell--kvAbD {
+  background-color: var(--main-feed-button-background);
+}
+.baseContainer--jxCbW {
+  background-color: var(--search-dialog-background);
+}
+.favoriteButton--Qladw.is-favorite path {
+  fill: var(--player-control-favorite);
+}
+.container--PFTHk {
+  background-color: var(--right-queue-background);
+}
+.container--cl4MJ {
+  background-color: var(--search-background);
+}
+
+/* Settings window styling */
+
+.settings-window {
+  color: var(--sidebar-menu-playlist-text);
+}
+.settings-window__wrapper {
+  background: var(--main-background);
+  box-shadow: inset 0 0 2px 0 var(--main-feed-button-background);
+}
+
+.settings-window__close-button:hover {
+  background: var(--main-feed-button-background);
+}
+
+.settings input:checked + label {
+  border-bottom: 2px solid var(--player-control-active-button);
+  color: var(--player-control-active-button);
+}
+
+.tabs::-webkit-scrollbar-thumb {
+  background-color: #404248;
+  box-shadow: inset 0 0 10px 2px var(--search-background);
+}
+
+.group {
+  border-bottom: 1px solid #333;
+}
+
+.group__description p {
+  color: var(--sidebar-menu-top-text);
+}
+.group__description .text-input {
+  border-bottom: solid 1px #333;
+  color: var(--sidebar-menu-top-text);
+}
+.group__description .text-input:focus {
+  border-color: var(--player-control-active-button);
+  color: var(--sidebar-menu-playlist-text);
+}
+
+.switch input:checked + .switch__slider {
+  background-color: var(--player-control-active-button);
+}
+.switch input:checked + .switch__slider::before {
+  background-color: var(--sidebar-menu-playlist-text);
+}
+.switch input:focus + .switch__slider {
+  box-shadow: inset 0 0 0 1px var(--player-control-active-button);
+}
+.switch__slider {
+  background-color: var(--search-background);
+}
+.switch__slider::before {
+  background-color: var(--sidebar-menu-playlist-text);
+}
+
+.textarea {
+  background: var(--search-background);
+  color: var(--sidebar-menu-top-text);
+}
+.textarea:focus {
+  border-color: var(--player-control-active-button);
+  color: var(--sidebar-menu-playlist-text);
+}
+
+.about-section__version a {
+  background-color: #404248;
+  color: var(--player-control-active-button);
+}
+.about-section__links a {
+  color: var(--sidebar-menu-playlist-text);
+
+  background-color: var(--search-background);
+}
+.about-section__links a i {
+  color: var(--sidebar-menu-playlist-text);
+}
+.about-section__links a:hover {
+  background-color: var(--player-control-favorite);
+}
+
+.footer__note {
+  color: var(--sidebar-menu-top-text);
+}
+.footer__button {
+  background: #404248;
+  color: var(--sidebar-menu-playlist-text);
+}
+.footer__button:hover {
+  background: #55585f;
+}
+
+.file-drop-area {
+  border: 1px dashed var(--sidebar-menu-top-text);
+}
+.file-drop-area.is-active {
+  background-color: #17171a;
+}
+
+.file-btn {
+  background-color: #17171a;
+  border: 1px solid var(--sidebar-menu-top-text);
+}
+
+.select-input {
+  border-bottom: solid 1px #333;
+  color: var(--sidebar-menu-top-text);
+}
+.select-input:focus {
+  border-color: var(--player-control-active-button);
+  color: var(--sidebar-menu-playlist-text);
+}
+.select-input option {
+  background-color: var(--search-background);
+}
+.select-input option:disabled {
+  color: var(--sidebar-menu-playlist-text);
+}
+
