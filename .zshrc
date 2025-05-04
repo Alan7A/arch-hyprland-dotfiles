@@ -116,6 +116,7 @@ alias ga="git add ."
 alias gc="git commit"
 alias gca="git commit --amend --no-edit --no-verify"
 alias gp="git push"
+alias gs="git status"
 alias yay="paru"
 alias ls='ls -lha --color=auto'
 
