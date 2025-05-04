@@ -117,6 +117,7 @@ alias gc="git commit"
 alias gca="git commit --amend --no-edit --no-verify"
 alias gp="git push"
 alias yay="paru"
+alias ls='ls -lha --color=auto'
 
 # React Native Environment Variables
 export ANDROID_SDK_ROOT=/home/alan7a/Android/Sdk
