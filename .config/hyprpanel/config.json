@@ -458,5 +458,7 @@
   "bar.workspaces.workspaceMask": false,
   "theme.bar.buttons.media.enableBorder": false,
   "bar.battery.label": true,
-  "menus.dashboard.powermenu.avatar.image": "/home/alan7a/Pictures/Otros/rose.jpg"
+  "menus.dashboard.powermenu.avatar.image": "/home/alan7a/Pictures/Otros/rose.jpg",
+  "theme.bar.transparent": false,
+  "theme.bar.opacity": 40
 }

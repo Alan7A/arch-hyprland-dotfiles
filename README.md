@@ -20,7 +20,7 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 | **Window Manager** | `hyprland` and ecosystem (`hyprpanel`, `hyprpicker`, `hyprshot`, `hyprlock`, `hypridle`, `hyprpaper`, `hyprcursor`, `hyprsunset`) |
 | **Terminal & Shell** | `kitty`, `zsh`, `oh-my-zsh`, `vim`, `paru` |
 | **Application Launcher** | `wofi` |
-| **System Utilities** | `wlogout`, `neofetch`, `wf-recorder`, `playerctl`, `solaar` |
+| **System Utilities** | `wlogout`, `neofetch`, `wf-recorder`, `playerctl`, `solaar`, `kdeconnect` |
 | **Appearance** | `xcursor-breeze`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine` |
 | **Miscellaneous** | `clipse`, `tidal-hifi-git`, `stow` |
 
