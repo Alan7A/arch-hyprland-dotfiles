@@ -32,6 +32,17 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 - Smile
 - Tidal HiFi
 
+## 🚀 Automatic Installation
+
+### 1. Give the script executable permissions
+```sh
+chmod +x install.sh
+```
+### 2. Run the script
+```sh
+./install.sh
+```
+
 ## 🛠️ Manual Installation
 
 ### 1. Install AUR Helper (paru)
@@ -83,15 +94,14 @@ cd dotfiles
 stow .
 ```
 
-## 🚀 Post-Installation
 
-### Change Default Shell to Zsh
+### 5. Change Default Shell to Zsh
 
 ```sh
 chsh -s /usr/bin/zsh
 ```
 
-### Install Oh-My-Zsh
+### 6. Install Oh-My-Zsh
 
 ```sh
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
