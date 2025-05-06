@@ -34,6 +34,8 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 
 ## 🚀 Automatic Installation
 
+> ⚠️ **Warning:** The installation script needs more testing and may not work as expected.
+
 ### 1. Give the script executable permissions
 ```sh
 chmod +x install.sh
