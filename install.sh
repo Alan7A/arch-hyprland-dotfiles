@@ -6,8 +6,21 @@ set -e
 GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}==> Installing base-devel and git...${NC}"
-sudo pacman -S --needed base-devel git --noconfirm
+echo -e "${GREEN}==> Installing base-devel, stow and git...${NC}"
+sudo pacman -S --needed base-devel stow git --noconfirm
+
+echo -e "${GREEN}==> Cloning dotfiles...${NC}"
+cd ~
+if [ -d "dotfiles" ]; then
+  echo "dotfiles folder already exists. Skipping clone."
+else
+  git clone git@github.com:Alan7A/arch-hyprland-dotfiles.git dotfiles
+fi
+
+cd ~/dotfiles
+
+echo -e "${GREEN}==> Applying dotfiles using stow...${NC}"
+stow .
 
 echo -e "${GREEN}==> Installing paru AUR helper...${NC}"
 if ! command -v paru &> /dev/null; then
@@ -39,19 +52,6 @@ flatpak install -y flathub \
   it.mijorus.smile \
   io.missioncenter.MissionCenter \
   com.mastermindzh.tidal-hifi
-
-echo -e "${GREEN}==> Cloning dotfiles...${NC}"
-cd ~
-if [ -d "dotfiles" ]; then
-  echo "dotfiles folder already exists. Skipping clone."
-else
-  git clone git@github.com:Alan7A/arch-hyprland-dotfiles.git dotfiles
-fi
-
-cd ~/dotfiles
-
-echo -e "${GREEN}==> Applying dotfiles using stow...${NC}"
-stow .
 
 echo -e "${GREEN}==> Changing default shell to zsh...${NC}"
 chsh -s /usr/bin/zsh
