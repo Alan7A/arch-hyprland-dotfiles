@@ -460,5 +460,6 @@
   "bar.battery.label": true,
   "menus.dashboard.powermenu.avatar.image": "/home/alan7a/Pictures/Otros/rose.jpg",
   "theme.bar.transparent": false,
-  "theme.bar.opacity": 40
+  "theme.bar.opacity": 40,
+  "theme.bar.menus.opacity": 100
 }

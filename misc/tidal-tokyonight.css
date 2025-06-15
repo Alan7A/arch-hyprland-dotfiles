@@ -19,8 +19,10 @@
   --wave-color-solid-accent-fill: #7aa2f7;
   --wave-color-solid-accent-dark: #78a0f79c;
   --wave-color-opacity-base-brighter-ultra-thick: #1a1b26cc;
+  --wave-color-solid-base-bright: #1a1b26;
   --wave-color-solid-base-brighter: #1a1b26;
-  --wave-color-solid-base-brightest: #2d2e38;
+  --wave-color-solid-base-brightest: #2c2e41;
+  --wave-color-opacity-contrast-fill-ultra-thin: #2c2e41ad;
 }
 #main {
   background-color: var(--main-background);
