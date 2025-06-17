@@ -21,7 +21,7 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 | **Terminal & Shell** | `kitty`, `zsh`, `oh-my-zsh`, `vim`, `paru` |
 | **Application Launcher** | `wofi` |
 | **System Utilities** | `wlogout`, `neofetch`, `wf-recorder`, `playerctl`, `solaar`, `kdeconnect` |
-| **Appearance** | `xcursor-breeze`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine` |
+| **Appearance** | `breezex-cursor-theme`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine`, `nwg-look`  |
 | **Miscellaneous** | `clipse`, `tidal-hifi-git`, `stow` |
 
 ### Flatpak
@@ -31,6 +31,7 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 - MissionCenter
 - Smile
 - Tidal HiFi
+- Gnome Music
 
 ## 🚀 Automatic Installation
 
@@ -61,7 +62,7 @@ makepkg -si
 
 ```sh
 paru -S hyprland hyprpanel wofi vim neofetch wlogout solaar \
-  xcursor-breeze numix-circle-icon-theme-git clipse \
+  breezex-cursor-theme numix-circle-icon-theme-git clipse \
   hyprpicker hyprshot hyprlock hypridle hyprpaper hyprcursor hyprsunset \
   gtk-engine-murrine wf-recorder ttf-fira-sans playerctl stow zsh ttf-meslo-nerd
 ```
@@ -81,7 +82,8 @@ flatpak install flathub \
   com.discordapp.Discord \
   it.mijorus.smile \
   io.missioncenter.MissionCenter \
-  com.mastermindzh.tidal-hifi
+  com.mastermindzh.tidal-hifi \
+  org.gnome.Music
 ```
 
 ### 4. Clone and Apply Dotfiles
