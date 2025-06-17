@@ -1,0 +1,9 @@
+{
+  "normal.alt-j": null,
+  "normal.alt-x": "EnterHintsMode_Click",
+  "normal.alt-k": null,
+  "normal.alt-X": "EnterHintsMode_BackgroundTab",
+  "normal.alt-L": null,
+  "normal.alt-c": "EnterHintsMode_Select",
+  "css": ".root {\n  font: menu;\n}\n\n.hint {\n  font-size: 12px;\n  padding: 2px;\n  color: black;\n  background-color: #bb9af7;\n  border: solid 1px rgba(0, 0, 0, 0.5);\n  text-transform: uppercase;\n  font-weight: bold;\n  line-height: 1;\n  white-space: nowrap;\n}\n\n.highlighted {\n  background-color: #9ece6a;\n}\n\n.matchedChars {\n  opacity: 0.3;\n}\n\n.matchedText {\n  border-bottom: 2px solid #ef0fff;\n  box-sizing: border-box;\n}\n\n.status {\n  font-size: 14px;\n  padding: 4px 6px;\n  color: white;\n  background-color: black;\n  box-shadow: 0 0 1px 0 rgba(255, 255, 255, 0.5);\n  bottom: 0;\n  right: 0;\n  line-height: 1;\n}\n\n.peek .hint:not(.hasMatchedChars):not(.highlighted) {\n  opacity: 0.2;\n}\n\n.mixedCase {\n  text-transform: none;\n}\n\n.hidden,\n.hint:not(.hidden) ~ .shruggie,\n.status:empty {\n  opacity: 0 !important;\n}"
+}
