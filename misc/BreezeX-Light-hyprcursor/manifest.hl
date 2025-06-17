@@ -1,0 +1,4 @@
+name = BreezeX-Light-hyprcursor
+description = BreezeX-Light ported to hyprcursor
+version = 0.2
+cursors_directory = hyprcursors
