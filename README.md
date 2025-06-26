@@ -17,12 +17,12 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 
 | Category | Packages |
 |----------|----------|
-| **Window Manager** | `hyprland` and ecosystem (`hyprpanel`, `hyprpicker`, `hyprshot`, `hyprlock`, `hypridle`, `hyprpaper`, `hyprcursor`, `hyprsunset`) |
+| **Window Manager** | `hyprland` and ecosystem (`hyprpanel`, `hyprpicker`, `hyprshot`, `hyprlock`, `hypridle`, `hyprpaper`, `hyprcursor`, `hyprsunset`, `hyprpolkitagent`) |
 | **Terminal & Shell** | `kitty`, `zsh`, `oh-my-zsh`, `vim`, `paru` |
 | **Application Launcher** | `wofi` |
-| **System Utilities** | `wlogout`, `neofetch`, `wf-recorder`, `playerctl`, `solaar`, `kdeconnect` |
-| **Appearance** | `breezex-cursor-theme`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine`, `nwg-look`  |
-| **Miscellaneous** | `clipse`, `tidal-hifi-git`, `stow` |
+| **System Utilities** | `wlogout`, `fastfetch`, `wf-recorder`, `playerctl`, `solaar`, `kdeconnect`, `nautilus-admin-gtk4`, `nautilus-image-converter`, `nautilus-open-any-terminal`  |
+| **Appearance** | `breezex-cursor-theme`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine`, `nwg-look`, `qt5-wayland`  |
+| **Miscellaneous** | `clipse`, `stow` |
 
 ### Flatpak
 
