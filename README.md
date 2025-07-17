@@ -61,7 +61,7 @@ makepkg -si
 ### 2. Install Required Packages
 
 ```sh
-paru -S hyprland hyprpanel wofi vim neofetch wlogout solaar \
+paru -S hyprland ags-hyprpanel-git wofi vim neofetch wlogout solaar \
   breezex-cursor-theme numix-circle-icon-theme-git clipse \
   hyprpicker hyprshot hyprlock hypridle hyprpaper hyprcursor hyprsunset \
   gtk-engine-murrine wf-recorder ttf-fira-sans playerctl stow zsh ttf-meslo-nerd
@@ -105,8 +105,14 @@ stow .
 chsh -s /usr/bin/zsh
 ```
 
-### 6. Install Oh-My-Zsh
+### 6. Install Oh-My-Zsh and plugins
 
 ```sh
+# Install Oh-My-Zsh
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+# zsh-autosuggestions
+git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+# zsh-syntax-highlighting
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git
+echo "source ${(q-)PWD}/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" >> ${ZDOTDIR:-$HOME}/.zshrc
 ```
