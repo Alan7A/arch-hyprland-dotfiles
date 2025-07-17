@@ -465,5 +465,9 @@
   "theme.bar.menus.opacity": 100,
   "theme.bar.buttons.modules.ram.enableBorder": false,
   "bar.customModules.hyprsunset.temperature": "3800k",
-  "bar.customModules.hyprsunset.label": false
+  "bar.customModules.hyprsunset.label": false,
+  "bar.customModules.storage.paths": [
+    "/"
+  ],
+  "menus.clock.weather.enabled": false
 }
