@@ -11,6 +11,12 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 
 ## 📸 Screenshots
 
+
+<div align="center">
+  <img src="misc/previews/screenshot1.png" alt="Desktop Preview 1"/>
+  <img src="misc/previews/screenshot2.png" alt="Desktop Preview 2"/>
+</div>
+
 ## 📦 Main Packages
 
 ### System Components
