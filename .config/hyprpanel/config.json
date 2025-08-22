@@ -356,6 +356,18 @@
     "0": {
       "left": [
         "dashboard",
+        "windowtitle"
+      ],
+      "middle": [
+        "clock"
+      ],
+      "right": [
+        "notifications"
+      ]
+    },
+    "1": {
+      "left": [
+        "dashboard",
         "workspaces",
         "windowtitle"
       ],
@@ -371,18 +383,6 @@
         "hyprsunset",
         "notifications",
         "power"
-      ]
-    },
-    "1": {
-      "left": [
-        "dashboard",
-        "windowtitle"
-      ],
-      "middle": [
-        "clock"
-      ],
-      "right": [
-        "notifications"
       ]
     }
   },
