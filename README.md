@@ -23,12 +23,12 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 
 | Category | Packages |
 |----------|----------|
-| **Window Manager** | `hyprland` and ecosystem (`hyprpanel`, `hyprpicker`, `hyprshot`, `hyprlock`, `hypridle`, `hyprpaper`, `hyprcursor`, `hyprsunset`, `hyprpolkitagent`) |
+| **Window Manager** | `hyprland` and ecosystem (`hyprpanel`, `hyprpicker`, `hyprshot`, `hyprlock`, `hypridle`, `hyprpaper`, `hyprcursor`, `hyprsunset`, `hyprpolkitagent`, `xdg-desktop-portal-hyprland`) |
 | **Terminal & Shell** | `kitty`, `zsh`, `oh-my-zsh`, `vim`, `paru` |
-| **Application Launcher** | `wofi` |
+| **Application Launcher** | `vicinae` |
 | **System Utilities** | `wlogout`, `fastfetch`, `wf-recorder`, `playerctl`, `solaar`, `kdeconnect`, `nautilus-admin-gtk4`, `nautilus-image-converter`, `nautilus-open-any-terminal`  |
 | **Appearance** | `breezex-cursor-theme`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine`, `nwg-look`, `qt5-wayland`  |
-| **Miscellaneous** | `clipse`, `stow` |
+| **Miscellaneous** | `stow` |    
 
 ### Flatpak
 
@@ -38,6 +38,7 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 - Smile
 - Tidal HiFi
 - Gnome Music
+- Celulloid
 
 ## 🚀 Automatic Installation
 
@@ -67,10 +68,40 @@ makepkg -si
 ### 2. Install Required Packages
 
 ```sh
-paru -S hyprland ags-hyprpanel-git wofi vim neofetch wlogout solaar \
-  breezex-cursor-theme numix-circle-icon-theme-git clipse \
-  hyprpicker hyprshot hyprlock hypridle hyprpaper hyprcursor hyprsunset \
-  gtk-engine-murrine wf-recorder ttf-fira-sans playerctl stow zsh ttf-meslo-nerd
+# Install required packages using paru
+paru -S \
+  # Hyprland and related tools
+  hyprland \
+  hyprpanel-git \
+  hyprpicker \
+  hyprshot \
+  hyprlock \
+  hypridle \
+  hyprpaper \
+  hyprcursor \
+  hyprsunset \
+  hyprpolkitagent \
+  xdg-desktop-portal-hyprland \
+  
+  # Terminal and system tools
+  vim \
+  neofetch \
+  wlogout \
+  solaar \
+  wf-recorder \
+  playerctl \
+  stow \
+  zsh \
+  vicinae-bin \
+  
+  # Appearance
+  breezex-cursor-theme \
+  numix-circle-icon-theme-git \
+  clipse \
+  gtk-engine-murrine \
+  ttf-fira-sans \
+  ttf-meslo-nerd
+```
 ```
 
 ### 3. Install Flatpak and Applications
@@ -90,6 +121,7 @@ flatpak install flathub \
   io.missioncenter.MissionCenter \
   com.mastermindzh.tidal-hifi \
   org.gnome.Music
+  io.github.celluloid_player.Celluloid
 ```
 
 ### 4. Clone and Apply Dotfiles

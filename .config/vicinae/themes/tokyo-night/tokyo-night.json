@@ -1,0 +1,19 @@
+{
+	"version": "1.0.0",
+	"appearance": "dark",
+	"icon": "./tokyo-night.png",
+	"name": "Tokyo Night",
+	"description": "A clean theme that celebrates the lights of Downtown Tokyo at night.",
+	"palette": {
+	  "background": "#1a1b26",
+	  "foreground": "#A9B1D6",
+	  "blue": "#7AA2F7",
+	  "green": "#9ECE6A",
+	  "magenta": "#bb9af7",
+	  "orange": "#ff9e64",
+	  "purple": "#BB9AF7",
+	  "red": "#F7768E",
+	  "yellow": "#e0af68",
+	  "cyan": "#7DCFFF"
+	}
+}
