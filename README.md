@@ -68,9 +68,8 @@ makepkg -si
 ### 2. Install Required Packages
 
 ```sh
-# Install required packages using paru
-paru -S \
-  # Hyprland and related tools
+# Hyprland and related tools
+paru -S --noconfirm \
   hyprland \
   hyprpicker \
   hyprshot \
@@ -83,9 +82,10 @@ paru -S \
   xdg-desktop-portal-hyprland \
   hyprland-qtutils \
   qt5-wayland \
-  qt6-wayland \
-  
-  # Hyprpanel and dependencies
+  qt6-wayland
+
+# Hyprpanel and dependencies
+paru -S --noconfirm \
   aylurs-gtk-shell-git \
   wireplumber \
   libgtop \
@@ -98,9 +98,10 @@ paru -S \
   gvfs \
   gtksourceview3 \
   libsoup3 \
-  ags-hyprpanel-git \
-  
-  # Terminal and system tools
+  ags-hyprpanel-git
+
+# Terminal and system tools
+paru -S --noconfirm \
   vim \
   fastfetch \
   wlogout \
@@ -109,9 +110,10 @@ paru -S \
   playerctl \
   stow \
   zsh \
-  vicinae-bin \
-  
-  # Appearance
+  vicinae-bin
+
+# Appearance
+paru -S --noconfirm \
   breezex-cursor-theme \
   numix-circle-icon-theme-git \
   gtk-engine-murrine \
