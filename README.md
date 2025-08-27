@@ -72,7 +72,6 @@ makepkg -si
 paru -S \
   # Hyprland and related tools
   hyprland \
-  hyprpanel-git \
   hyprpicker \
   hyprshot \
   hyprlock \
@@ -82,10 +81,28 @@ paru -S \
   hyprsunset \
   hyprpolkitagent \
   xdg-desktop-portal-hyprland \
+  hyprland-qtutils \
+  qt5-wayland \
+  qt6-wayland \
+  
+  # Hyprpanel and dependencies
+  aylurs-gtk-shell-git \
+  wireplumber \
+  libgtop \
+  bluez \
+  bluez-utils \
+  networkmanager \
+  dart-sass \
+  wl-clipboard \
+  upower \
+  gvfs \
+  gtksourceview3 \
+  libsoup3 \
+  ags-hyprpanel-git \
   
   # Terminal and system tools
   vim \
-  neofetch \
+  fastfetch \
   wlogout \
   solaar \
   wf-recorder \
@@ -97,7 +114,6 @@ paru -S \
   # Appearance
   breezex-cursor-theme \
   numix-circle-icon-theme-git \
-  clipse \
   gtk-engine-murrine \
   ttf-fira-sans \
   ttf-meslo-nerd
@@ -117,7 +133,6 @@ flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flat
 flatpak install flathub \
   app.zen_browser.zen \
   com.discordapp.Discord \
-  it.mijorus.smile \
   io.missioncenter.MissionCenter \
   com.mastermindzh.tidal-hifi \
   org.gnome.Music
