@@ -118,7 +118,6 @@ paru -S \
   ttf-fira-sans \
   ttf-meslo-nerd
 ```
-```
 
 ### 3. Install Flatpak and Applications
 
