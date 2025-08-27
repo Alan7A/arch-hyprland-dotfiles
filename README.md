@@ -136,17 +136,15 @@ flatpak install flathub \
   com.discordapp.Discord \
   io.missioncenter.MissionCenter \
   com.mastermindzh.tidal-hifi \
-  org.gnome.Music
+  org.gnome.Music \
   io.github.celluloid_player.Celluloid
 ```
 
 ### 4. Clone and Apply Dotfiles
 
 ```sh
-cd ~
-git clone git@github.com:Alan7A/arch-hyprland-dotfiles.git
-mv arch-hyprland-dotfiles dotfiles
-cd dotfiles
+git clone git@github.com:Alan7A/arch-hyprland-dotfiles.git ~/dotfiles
+cd ~/dotfiles
 
 # Create symlinks using GNU Stow
 stow .
