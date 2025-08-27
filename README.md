@@ -143,10 +143,8 @@ flatpak install flathub \
 ### 4. Clone and Apply Dotfiles
 
 ```sh
-git clone git@github.com:Alan7A/arch-hyprland-dotfiles.git ~/dotfiles
-cd ~/dotfiles
-
-# Create symlinks using GNU Stow
+git clone https://github.com/Alan7A/fedora-post-install.git ~/dotfiles && \
+cd ~/dotfiles && \
 stow .
 ```
 
