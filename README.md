@@ -98,6 +98,7 @@ paru -S --noconfirm \
   gvfs \
   gtksourceview3 \
   libsoup3 \
+  swww \
   ags-hyprpanel-git
 
 # Terminal and system tools
@@ -110,7 +111,11 @@ paru -S --noconfirm \
   playerctl \
   stow \
   zsh \
-  vicinae-bin
+  nautilus-open-any-terminal \
+  vicinae-bin \
+  visual-studio-code-bin \
+  zoxide \
+  eza \
 
 # Appearance
 paru -S --noconfirm \
@@ -160,9 +165,10 @@ chsh -s /usr/bin/zsh
 ```sh
 # Install Oh-My-Zsh
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+# Powerlevel10k theme
+git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k"
 # zsh-autosuggestions
 git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
 # zsh-syntax-highlighting
-git clone https://github.com/zsh-users/zsh-syntax-highlighting.git
-echo "source ${(q-)PWD}/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" >> ${ZDOTDIR:-$HOME}/.zshrc
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 ```

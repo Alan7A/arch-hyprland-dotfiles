@@ -106,9 +106,6 @@ source $ZSH/oh-my-zsh.sh
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
-alias aws="/usr/local/bin/aws"
-alias xampp="sudo /opt/lampp/lampp start"
-alias xampp_stop="sudo /opt/lampp/lampp stop"
 alias up="paru -Syu; flatpak update"
 alias emulator="~/Android/Sdk/emulator/emulator -avd Medium_Phone_API_34"
 alias switchjava="sudo alternatives --config java"
@@ -118,7 +115,18 @@ alias gca="git commit --amend --no-edit --no-verify"
 alias gp="git push"
 alias gs="git status"
 alias yay="paru"
-alias ls='ls -lha --color=auto'
+alias ls="eza -lh --group-directories-first --icons=auto"
+alias lsa="ls -a"
+alias ..='cd ..'
+zd() {
+  if [ $# -eq 0 ]; then
+    builtin cd ~ && return
+  elif [ -d "$1" ]; then
+    builtin cd "$1"
+  else
+    z "$@" && printf "\U000F17A9 " && pwd || echo "Error: Directory not found"
+  fi
+}
 
 # React Native Environment Variables
 export ANDROID_SDK_ROOT=/home/alan7a/Android/Sdk
