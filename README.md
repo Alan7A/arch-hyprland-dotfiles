@@ -82,7 +82,8 @@ paru -S --noconfirm \
   xdg-desktop-portal-hyprland \
   hyprland-qtutils \
   qt5-wayland \
-  qt6-wayland
+  qt6-wayland \
+  hyprqt6engine-git \
 
 # Hyprpanel and dependencies
 paru -S --noconfirm \
@@ -116,6 +117,7 @@ paru -S --noconfirm \
   visual-studio-code-bin \
   zoxide \
   eza \
+  kdeconnect \
 
 # Appearance
 paru -S --noconfirm \
@@ -142,7 +144,8 @@ flatpak install flathub \
   io.missioncenter.MissionCenter \
   com.mastermindzh.tidal-hifi \
   org.gnome.Music \
-  io.github.celluloid_player.Celluloid
+  io.github.celluloid_player.Celluloid \
+  com.github.wwmm.easyeffects \
 ```
 
 ### 4. Clone and Apply Dotfiles
@@ -172,3 +175,64 @@ git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-m
 # zsh-syntax-highlighting
 git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 ```
+
+### Troubleshooting
+
+---
+
+#### Git configurations
+
+```sh
+git config --global init.defaultBranch main
+git config --global core.editor "vim"
+git config --global user.email "you@example.com"
+git config --global user.name "Your Name"
+```
+---
+
+#### Fix dualboot showing different times
+
+```sh
+timedatectl set-local-rtc 1
+```
+
+---
+
+#### Theme Flatpak apps
+
+- This command makes flatpak apps to use the application's theme
+  ```sh
+  sudo flatpak override --filesystem=~/.themes
+  ```
+- Or you can use [stylepak](https://github.com/refi64/stylepak)
+
+---
+
+#### KDE Connect doesn't detect my device
+
+This is most likely because some of the ports kdeconnect needs are not open. You can fix this following these steps:
+1. Open firewall-config gui, in the left list, make sure you have selected the zone that your connection uses (for example Wired Connection → Public)
+2. At the top, select the Ports tab and click the Add button
+3. In the window that opens, In Port enter: `1714-1764` and in Protocol select `TCP`, then click OK
+4. Repeat the same process but this time select `UDP` in Protocol.
+5. Make sure the configuration is set to Permanent and then click on Options → Reload Firewalld to apply the changes.
+
+As an alternative solution you can try the following commands
+```sh
+sudo firewall-cmd --permanent --add-port=1714-1764/tcp
+sudo firewall-cmd --permanent --add-port=1714-1764/udp
+sudo firewall-cmd --reload
+```
+
+---
+
+#### Install rEFInd and rEFInd theme Regular
+
+- Install [rEFInd](https://www.rodsbooks.com/refind/)
+  ```sh
+  sudo pacman -S refind
+  ```
+- Install [rEFInd theme Regular](https://github.com/bobafetthotmail/refind-theme-regular#refind-theme-regular)
+  ```sh
+  sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/bobafetthotmail/refind-theme-regular/master/install.sh)"
+  ```
