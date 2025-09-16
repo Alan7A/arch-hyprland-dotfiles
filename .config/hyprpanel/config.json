@@ -476,5 +476,6 @@
   "menus.dashboard.directories.left.directory3.label": "󰚝 Projects",
   "menus.dashboard.directories.left.directory3.command": "bash -c \"xdg-open $HOME/Projects/\"",
   "menus.dashboard.directories.enabled": false,
-  "theme.osd.opacity": 100
+  "theme.osd.opacity": 100,
+  "bar.media.truncation_size": 60
 }

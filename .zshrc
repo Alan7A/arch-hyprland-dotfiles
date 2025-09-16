@@ -50,6 +50,7 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 
 # Uncomment the following line to enable command auto-correction.
 # ENABLE_CORRECTION="true"
+setopt CORRECT
 
 # Uncomment the following line to display red dots whilst waiting for completion.
 # Caution: this setting can cause issues with multiline prompts (zsh 5.7.1 and newer seem to work)
@@ -107,7 +108,7 @@ source $ZSH/oh-my-zsh.sh
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 alias up="paru -Syu; flatpak update"
-alias emulator="~/Android/Sdk/emulator/emulator -avd Medium_Phone_API_34"
+alias emulator="QT_QPA_PLATFORM=xcb ~/Android/Sdk/emulator/emulator -avd Medium_Phone"
 alias switchjava="sudo alternatives --config java"
 alias ga="git add ."
 alias gc="git commit"
@@ -115,8 +116,10 @@ alias gca="git commit --amend --no-edit --no-verify"
 alias gp="git push"
 alias gs="git status"
 alias yay="paru"
+alias nano="vim"
 alias ls="eza -lh --group-directories-first --icons=auto"
 alias lsa="ls -a"
+alias cd="zd"
 alias ..='cd ..'
 zd() {
   if [ $# -eq 0 ]; then
@@ -127,6 +130,8 @@ zd() {
     z "$@" && printf "\U000F17A9 " && pwd || echo "Error: Directory not found"
   fi
 }
+
+eval "$(zoxide init zsh)"
 
 # React Native Environment Variables
 export ANDROID_SDK_ROOT=/home/alan7a/Android/Sdk

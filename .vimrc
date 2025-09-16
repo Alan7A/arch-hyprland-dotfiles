@@ -13,6 +13,7 @@ set termguicolors
 set ignorecase
 set smartcase
 set laststatus=2
+set scrolloff=5
 
 call plug#begin('~/.vim/plugged')
 Plug 'vim-airline/vim-airline'
