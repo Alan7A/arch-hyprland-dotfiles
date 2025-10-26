@@ -1,8 +1,12 @@
 {
+    "closeOnFocusLoss": false,
     "faviconService": "google",
     "font": {
         "normal": "Fira Sans",
         "size": 11
+    },
+    "keybinding": "default",
+    "keybinds": {
     },
     "popToRootOnClose": true,
     "rootSearch": {
@@ -10,7 +14,7 @@
     },
     "theme": {
         "iconTheme": "Numix-Circle",
-        "name": "tokyo-night.json"
+        "name": "tokyo-night"
     },
     "window": {
         "csd": true,
