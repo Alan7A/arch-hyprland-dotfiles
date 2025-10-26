@@ -105,8 +105,6 @@ source $ZSH/oh-my-zsh.sh
 # For a full list of active aliases, run `alias`.
 #
 # Example aliases
-# alias zshconfig="mate ~/.zshrc"
-# alias ohmyzsh="mate ~/.oh-my-zsh"
 alias up="paru -Syu; flatpak update"
 alias emulator="QT_QPA_PLATFORM=xcb ~/Android/Sdk/emulator/emulator -avd Medium_Phone"
 alias switchjava="sudo alternatives --config java"
@@ -116,7 +114,8 @@ alias gca="git commit --amend --no-edit --no-verify"
 alias gp="git push"
 alias gs="git status"
 alias yay="paru"
-alias nano="vim"
+alias nano="nvim"
+alias vim='nvim'
 alias ls="eza -lh --group-directories-first --icons=auto"
 alias lsa="ls -a"
 alias cd="zd"

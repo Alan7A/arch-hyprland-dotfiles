@@ -23,35 +23,19 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 
 | Category | Packages |
 |----------|----------|
-| **Window Manager** | `hyprland` and ecosystem (`hyprpanel`, `hyprpicker`, `hyprshot`, `hyprlock`, `hypridle`, `hyprpaper`, `hyprcursor`, `hyprsunset`, `hyprpolkitagent`, `xdg-desktop-portal-hyprland`) |
-| **Terminal & Shell** | `kitty`, `zsh`, `oh-my-zsh`, `vim`, `paru` |
+| **Window Manager** | `hyprland` and ecosystem (`hyprpicker`, `hyprshot`, `hyprlock`, `hypridle`, `hyprpaper`, `hyprcursor`, `hyprsunset`, `hyprpolkitagent`, `xdg-desktop-portal-hyprland`, `hyprqt6engine`) |
+| **Terminal & Shell** | `kitty`, `zsh`, `oh-my-zsh`, `neovim`, `paru`, `quickshell`, `noctalia-shell` |
 | **Application Launcher** | `vicinae` |
-| **System Utilities** | `wlogout`, `fastfetch`, `wf-recorder`, `playerctl`, `solaar`, `kdeconnect`, `nautilus-admin-gtk4`, `nautilus-image-converter`, `nautilus-open-any-terminal`  |
+| **System Utilities** | `wlogout`, `fastfetch`, `playerctl`, `solaar`, `kdeconnect`, `nautilus-admin-gtk4`, `nautilus-image-converter`, `nautilus-open-any-terminal`  |
 | **Appearance** | `breezex-cursor-theme`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine`, `nwg-look`, `qt5-wayland`  |
 | **Miscellaneous** | `stow` |    
 
 ### Flatpak
 
-- Zen Browser
-- Discord
-- MissionCenter
-- Smile
-- Tidal HiFi
+- Mission Center
 - Gnome Music
 - Celulloid
-
-## 🚀 Automatic Installation
-
-> ⚠️ **Warning:** The installation script needs more testing and may not work as expected.
-
-### 1. Give the script executable permissions
-```sh
-chmod +x install.sh
-```
-### 2. Run the script
-```sh
-./install.sh
-```
+- Easy Effects
 
 ## 🛠️ Manual Installation
 
@@ -83,41 +67,33 @@ paru -S --noconfirm \
   hyprland-qtutils \
   qt5-wayland \
   qt6-wayland \
-  hyprqt6engine-git \
-
-# Hyprpanel and dependencies
-paru -S --noconfirm \
-  aylurs-gtk-shell-git \
-  wireplumber \
-  libgtop \
-  bluez \
-  bluez-utils \
-  networkmanager \
-  dart-sass \
-  wl-clipboard \
-  upower \
-  gvfs \
-  gtksourceview3 \
-  libsoup3 \
-  swww \
-  ags-hyprpanel-git
+  hyprqt6engine \
+  quickshell \
+  noctalia-shell \
 
 # Terminal and system tools
 paru -S --noconfirm \
-  vim \
+  neovim \
   fastfetch \
   wlogout \
   solaar \
-  wf-recorder \
   playerctl \
   stow \
   zsh \
   nautilus-open-any-terminal \
   vicinae-bin \
-  visual-studio-code-bin \
   zoxide \
   eza \
   kdeconnect \
+
+# Programs
+paru -S --noconfirm \
+  visual-studio-code-bin \
+  zen-browser-bin \
+  tidal-hifi-bin \
+  localsend-bin \
+  vesktop-bin \
+  obsidian-bin
 
 # Appearance
 paru -S --noconfirm \
@@ -139,10 +115,7 @@ flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flat
 
 # Install applications
 flatpak install flathub \
-  app.zen_browser.zen \
-  com.discordapp.Discord \
   io.missioncenter.MissionCenter \
-  com.mastermindzh.tidal-hifi \
   org.gnome.Music \
   io.github.celluloid_player.Celluloid \
   com.github.wwmm.easyeffects \
@@ -184,7 +157,7 @@ git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:
 
 ```sh
 git config --global init.defaultBranch main
-git config --global core.editor "vim"
+git config --global core.editor "nvim"
 git config --global user.email "you@example.com"
 git config --global user.name "Your Name"
 ```
@@ -231,6 +204,7 @@ sudo firewall-cmd --reload
 - Install [rEFInd](https://www.rodsbooks.com/refind/)
   ```sh
   sudo pacman -S refind
+  sudo refind-install
   ```
 - Install [rEFInd theme Regular](https://github.com/bobafetthotmail/refind-theme-regular#refind-theme-regular)
   ```sh
