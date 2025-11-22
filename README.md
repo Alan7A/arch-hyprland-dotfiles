@@ -89,6 +89,7 @@ paru -S --noconfirm \
   7zip \
   resvg \
   dragon-drop \
+  cava \
 
 # Programs
 paru -S --noconfirm \
