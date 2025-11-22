@@ -98,7 +98,8 @@ paru -S --noconfirm \
   tidal-hifi-bin \
   localsend-bin \
   vesktop-bin \
-  obsidian-bin
+  obsidian-bin \
+  mpv \
 
 # Appearance
 paru -S --noconfirm \
@@ -123,7 +124,6 @@ flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flat
 flatpak install flathub \
   io.missioncenter.MissionCenter \
   org.gnome.Music \
-  io.github.celluloid_player.Celluloid \
   com.github.wwmm.easyeffects \
 ```
 
