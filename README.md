@@ -27,7 +27,7 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 | **Terminal & Shell** | `kitty`, `zsh`, `oh-my-zsh`, `neovim`, `paru`, `quickshell`, `noctalia-shell` |
 | **Application Launcher** | `vicinae` |
 | **System Utilities** | `wlogout`, `fastfetch`, `playerctl`, `solaar`, `kdeconnect`, `nautilus-admin-gtk4`, `nautilus-image-converter`, `nautilus-open-any-terminal`  |
-| **Appearance** | `breezex-cursor-theme`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine`, `nwg-look`, `qt5-wayland`  |
+| **Appearance** | `breezex-cursor-theme`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine`, `nwg-look`, `qt5-wayland`, `ttf-cascadia-mono-nerd`  |
 | **Miscellaneous** | `stow` |    
 
 ### Flatpak
@@ -85,6 +85,10 @@ paru -S --noconfirm \
   zoxide \
   eza \
   kdeconnect \
+  yazi \
+  7zip \
+  resvg \
+  dragon-drop \
 
 # Programs
 paru -S --noconfirm \
@@ -101,7 +105,8 @@ paru -S --noconfirm \
   numix-circle-icon-theme-git \
   gtk-engine-murrine \
   ttf-fira-sans \
-  ttf-meslo-nerd
+  ttf-jetbrains-mono-nerd \
+  ttf-cascadia-mono-nerd
 ```
 
 ### 3. Install Flatpak and Applications

@@ -129,8 +129,23 @@ zd() {
     z "$@" && printf "\U000F17A9 " && pwd || echo "Error: Directory not found"
   fi
 }
+function y() {
+	local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+	yazi "$@" --cwd-file="$tmp"
+	IFS= read -r -d '' cwd < "$tmp"
+	[ -n "$cwd" ] && [ "$cwd" != "$PWD" ] && builtin cd -- "$cwd"
+	rm -f -- "$tmp"
+}
 
+# Defaults
+export EDITOR=nvim
+
+# Zoxide
 eval "$(zoxide init zsh)"
+
+# FZF
+export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude node_modules'
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 
 # React Native Environment Variables
 export ANDROID_SDK_ROOT=/home/alan7a/Android/Sdk
@@ -143,7 +158,6 @@ export PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-
 
 # bun completions
 [ -s "/home/alan7a/.bun/_bun" ] && source "/home/alan7a/.bun/_bun"
