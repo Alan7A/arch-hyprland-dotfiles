@@ -2,13 +2,15 @@
     "appLauncher": {
         "customLaunchPrefix": "",
         "customLaunchPrefixEnabled": false,
+        "enableClipPreview": true,
         "enableClipboardHistory": false,
         "pinnedExecs": [
         ],
         "position": "center",
         "sortByMostUsed": true,
         "terminalCommand": "xterm -e",
-        "useApp2Unit": false
+        "useApp2Unit": false,
+        "viewMode": "list"
     },
     "audio": {
         "cavaFrameRate": 60,
@@ -54,13 +56,11 @@
                     "useDistroLogo": false
                 },
                 {
-                    "characterCount": 2,
                     "colorizeIcons": false,
                     "hideUnoccupied": false,
                     "id": "TaskbarGrouped",
                     "labelMode": "index",
-                    "showNumbersOnlyWhenOccupied": false,
-                    "showWorkspaceNumbers": false
+                    "showLabelsOnlyWhenOccupied": true
                 },
                 {
                     "colorizeIcons": false,
@@ -81,6 +81,7 @@
                     "scrollingMode": "hover",
                     "showAlbumArt": true,
                     "showArtistFirst": true,
+                    "showProgressRing": true,
                     "showVisualizer": true,
                     "useFixedWidth": false,
                     "visualizerType": "wave"
@@ -225,6 +226,7 @@
         "onlySameOutput": true,
         "pinnedApps": [
         ],
+        "radiusRatio": 0.1,
         "size": 1
     },
     "general": {
@@ -244,6 +246,7 @@
         "shadowDirection": "bottom_right",
         "shadowOffsetX": 2,
         "shadowOffsetY": 3,
+        "showHibernateOnLockScreen": false,
         "showScreenCorners": false
     },
     "hooks": {
@@ -353,6 +356,7 @@
     },
     "templates": {
         "alacritty": false,
+        "cava": false,
         "code": false,
         "discord": true,
         "enableUserTemplates": false,
@@ -365,6 +369,7 @@
         "pywalfox": false,
         "qt": false,
         "spicetify": false,
+        "telegram": false,
         "vicinae": false,
         "walker": false,
         "wezterm": false
