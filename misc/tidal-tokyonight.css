@@ -205,9 +205,25 @@ button.feedBell--kvAbD {
   color: var(--sidebar-menu-playlist-text);
 }
 
-/* Sidebar items */
-:is(a._sidebarItem_730d27e, button._sidebarItem_730d27e):hover, ._active_3451dba:is(a._sidebarItem_730d27e, button._sidebarItem_730d27e) {
+/* Header */
+._header_3fe665f._solidHeader_2b3f298,
+._smallHeader_383424b {
+  background-color: var(--main-background) !important;
+}
+._smallHeader_383424b._solidBackground_a62a269:before {
+  background-color: var(--main-background);
+  content: unset;
+}
+
+/* Sidebar */
+._navigationItem_4e9deae:hover,
+._navigationItem_4e9deae._selected_29027d1,
+:is(a._sidebarItem_730d27e, button._sidebarItem_730d27e):hover,
+._active_3451dba:is(a._sidebarItem_730d27e, button._sidebarItem_730d27e) {
   background-color: var(--player-control-background);
+}
+._sectionHeader_5f11aab {
+  background-color: var(--sidebar-background);
 }
 
 /*shortcuts*/
