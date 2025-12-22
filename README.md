@@ -108,7 +108,8 @@ paru -S --noconfirm \
   gtk-engine-murrine \
   ttf-fira-sans \
   ttf-jetbrains-mono-nerd \
-  ttf-cascadia-mono-nerd
+  ttf-cascadia-mono-nerd \
+  bongocat
 ```
 
 ### 3. Install Flatpak and Applications
