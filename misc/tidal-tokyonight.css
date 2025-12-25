@@ -259,3 +259,8 @@ div._searchField_b2eb7f7:focus-within {
 div:has(> ._headerContainer_38705a9[data-test="horizontal-list-header--RECOMMENDED_USERS_PLAYLISTS"]) {
   display: none;
 }
+
+/* Feed header */
+._sectionHeader_cdc6234 {
+  background-color: var(--main-background);
+}
