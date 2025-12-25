@@ -168,3 +168,11 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 
 # Created by `pipx` on 2024-08-25 06:47:55
 export PATH="$PATH:/home/alan7a/.local/bin"
+
+# pnpm
+export PNPM_HOME="/home/alan7a/.local/share/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
