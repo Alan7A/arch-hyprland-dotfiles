@@ -9,10 +9,13 @@ DraggableDesktopWidget {
 
   property var pluginApi: null
 
-  implicitWidth: 300
-  implicitHeight: 300
+  implicitWidth: Math.round(300 * widgetScale)
+  implicitHeight: Math.round(300 * widgetScale)
 
   showBackground: false
+
+  // Scaled dimensions
+  readonly property int scaledRadiusL: Math.round(Style.radiusL * widgetScale)
 
   // Settings from plugin
   readonly property real sensitivity: pluginApi?.pluginSettings?.sensitivity ?? pluginApi?.manifest?.metadata?.defaultSettings?.sensitivity
@@ -113,7 +116,7 @@ DraggableDesktopWidget {
     property real showBars: root.showBars ? 1.0 : 0.0
     property real barWidth: root.barWidth
     property real ringOpacity: root.ringOpacity
-    property real cornerRadius: Style.radiusL
+    property real cornerRadius: scaledRadiusL
     property real bloomIntensity: root.bloomIntensity
 
     fragmentShader: pluginApi ? Qt.resolvedUrl(pluginApi.pluginDir + "/shaders/visualizer.frag.qsb") : ""
@@ -123,13 +126,14 @@ DraggableDesktopWidget {
   Rectangle {
     anchors.fill: parent
     color: Color.mSurface
-    radius: Style.radiusL
+    radius: scaledRadiusL
     visible: !visualizer.visible || visualizer.fragmentShader === ""
 
     Text {
       anchors.centerIn: parent
       text: "Loading..."
       color: Color.mOnSurface
+      font.pointSize: Math.round(Style.fontSizeM * widgetScale)
     }
   }
 }

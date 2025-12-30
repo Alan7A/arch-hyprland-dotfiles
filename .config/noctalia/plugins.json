@@ -9,6 +9,9 @@
     "states": {
         "fancy-audiovisualizer": {
             "enabled": true
+        },
+        "privacy-indicator": {
+            "enabled": true
         }
     },
     "version": 1
