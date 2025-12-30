@@ -109,7 +109,9 @@ paru -S --noconfirm \
   ttf-fira-sans \
   ttf-jetbrains-mono-nerd \
   ttf-cascadia-mono-nerd \
-  bongocat
+  bongocat \
+  adw-gtk-theme \
+  nwg-look
 ```
 
 ### 3. Install Flatpak and Applications
