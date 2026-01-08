@@ -1,0 +1,53 @@
+:root {
+    --background: #16161e;
+    --text: #cdd6f4;
+    --icons: #cdd6f4;
+    --accent: #7aa2f7;
+    --surface: #24283b;
+}
+
+[class*="main"],
+[class*="sidebar"],
+[class*="_bar"],
+[class*="Header"],
+[class*="header"],
+#footerPlayer {
+    background-color: transparent !important;
+}
+
+[class*="Header"]::before,
+body {
+    background-color: var(--background) !important;
+    color: var(--text);
+    fill: var(--icons);
+}
+
+* {
+    color: var(--text);
+    --wave-color-text-main: var(--text);
+    --market-core-fill-white-color: var(--icons);
+    --wave-color-solid-base-fill: var(--background);
+    --wave-color-solid-base-bright: var(--accent);
+    --market-core-surface-10-color: var(--surface);
+    --market-core-surface-20-color: var(--surface);
+    --market-core-surface-30-color: var(--surface);
+}
+
+[class*="indicator"],
+[class*="marketButton"],
+[class*="Header"]::before,
+[class*="_contextMenu_"] {
+    background-color: var(--accent);
+}
+
+[class*="Text"] {
+    color: var(--text);
+}
+
+select {
+    background-color: transparent !important;
+}
+
+option {
+    background-color: var(--surface);
+}

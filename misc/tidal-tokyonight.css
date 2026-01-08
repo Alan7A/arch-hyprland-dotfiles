@@ -206,11 +206,11 @@ button.feedBell--kvAbD {
 }
 
 /* Header */
-._header_3fe665f._solidHeader_2b3f298,
-._smallHeader_383424b {
+[class*="_header_"][class*="_solidHeader_"],
+[class*="_smallHeader_"] {
   background-color: var(--main-background) !important;
 }
-._smallHeader_383424b._solidBackground_a62a269:before {
+[class*="_smallHeader_"][class*="_solidBackground_"]:before {
   background-color: var(--main-background);
   content: unset;
 }
@@ -222,15 +222,18 @@ button.feedBell--kvAbD {
 ._active_3451dba:is(a._sidebarItem_730d27e, button._sidebarItem_730d27e) {
   background-color: var(--player-control-background);
 }
-._sectionHeader_5f11aab {
+[class*="_sectionHeader_"] {
+  background-color: var(--sidebar-background);
+}
+[class*="_marketText_"] {
   background-color: var(--sidebar-background);
 }
 
 /*shortcuts*/
-._shortcutItem_6c8e7b4 {
+[class*="_shortcutItem_"] {
     background-color: #1a1b26 !important;
 }
-._shortcutItem_6c8e7b4::after {
+[class*="_shortcutItem_"]::after {
     background: linear-gradient(to right, transparent, #1a1b26);
 }
 ._createdBy_0c4a82d,
@@ -248,10 +251,10 @@ div._searchField_b2eb7f7:focus-within {
 }
 
 /* Context menu */
-._contextMenu_8606b2d {
+[class*="_contextMenu_"] {
   background-color: var(--wave-color-solid-base-brighter);
 }
-._actionItem_e0c1e65:hover {
+[class*="_actionItem_"]:hover {
     background-color: var(var(--wave-color-opacity-contrast-fill-ultra-thin));
 }
 
@@ -261,6 +264,6 @@ div:has(> ._headerContainer_38705a9[data-test="horizontal-list-header--RECOMMEND
 }
 
 /* Feed header */
-._sectionHeader_cdc6234 {
+[class*="_sectionHeader_"] {
   background-color: var(--main-background);
 }

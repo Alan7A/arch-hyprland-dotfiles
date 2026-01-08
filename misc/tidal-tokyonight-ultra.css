@@ -1,0 +1,604 @@
+/* =========================================================
+   LUNALLENA 🌕 by Acercandr0
+   Theme for Tidaluna + Sidebar 3.0
+   ========================================================= */
+
+/* =========================================================
+   VARIABLES
+   ========================================================= */
+
+:root {
+    /* Backgrounds */
+    --bg-transparent: transparent;
+    --bg-glass-dark: rgba(50, 50, 50, 0.3);
+    --bg-glass-darker: rgba(30, 30, 30, 0.5);
+    --bg-glass-darkest: rgba(10, 10, 10, 0);
+    --bg-glass-light: rgba(255, 255, 255, 0.05);
+    --bg-solid: rgb(60, 60, 60);
+    --bg-solid2: rgba(66, 66, 66, 0.4);
+    --bg-shortcut: #1a1b26;
+    --bg-shortcut-hover: #24283b;
+    --bg-button-hover: #24283b;
+    --bgeneral: #16161e;
+    --wave-color-solid-accent-fill: #7aa2f7;
+
+    /* Backdrop Filter */
+    --blur-glass: blur(30px) saturate(2);
+    --blur-now-playing: blur(50px) saturate(2);
+    --blur-play-queue: blur(25px) saturate(2);
+    --blur-metadata: blur(100px) saturate (5);
+    
+    /* Borders */
+    --border-glass: 1px solid rgba(255, 255, 255, 0.1);
+    
+    /* Light */
+    --moonlight: 
+    0px 0px 300px rgba(255, 255, 255, 0.1), 
+    0px 0px 40px rgba(255, 255, 255, 0.3) !important;
+}
+
+/* =========================================================
+   METADATA TAGS
+   ========================================================= */
+
+[class="format-info"] {
+    font-size: 12px;
+    width: 55px;
+    background: var(--bg-glass-light);
+}
+
+[data-test="footer-player"] {
+    grid-auto-columns: minmax(auto, calc(32vw - 55px));
+}
+
+/* =========================================================
+   TITLEBAR
+   ========================================================= */
+
+[class*="_bar_"] {
+    margin-bottom: -30px;
+    margin-left: 13px;
+    background: transparent !important;
+}
+
+[class*="_controls_"] {
+    margin-right: 15px;
+    margin-top: 0px;
+}
+
+div[class*="_title_"] {
+    display: none !important;
+}
+
+div[class*="_bar_"] button[class*="_button_"] {
+    background: var(--bg-transparent);
+}
+
+div[class*="_bar_"] button[class*="_button_"] svg {
+    color: rgba(255, 255, 255, 0.3);
+    margin-top: 15px;
+}
+
+div[class*="_bar_"] button[class*="_button_"]:hover svg {
+    color: rgba(255, 255, 255, 1);
+}
+
+/* =========================================================
+   HEADERS
+   ========================================================= */
+   
+#mainHeader {
+    background-color: var(--bg-glass-dark);
+    backdrop-filter: var(--blur-glass);
+    border-bottom: var(--border-glass);
+    height: 40px;
+}
+
+#mainHeader:not([data-test="header"]) > * {
+    margin-top: 45px;
+}
+
+[data-test="header"] {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 12px;
+    padding-right: 15px;
+}
+
+[data-type="search-field"] {
+    background-color: var(--bg-solid);
+    border: var(--border-glass);
+    box-shadow: none;
+    order: 1;
+    margin-right: auto;
+}
+
+[data-test="navigation-arrows"] {
+    background: none !important;
+    display: flex;
+    gap: 8px;
+    margin: 0;
+    order: 0;
+}
+
+[data-test="navigation-arrows"] button {
+    background-color: var(--bg-solid) !important;
+    background-image: none !important;
+    border: var(--border-glass);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    transition: background-color 0.2s ease;
+    appearance: none;
+    outline: none;
+    position: relative;
+}
+
+[data-test="navigation-arrows"] button::before,
+[data-test="navigation-arrows"] button::after {
+    display: none !important;
+}
+
+[data-test="navigation-arrows"] button:hover:not(:disabled) {
+    background-color: var(--bg-solid2) !important;
+}
+
+[data-test="navigation-arrows"] button:disabled {
+    background-color: var(--bg-solid) !important;
+    opacity: 0.3;
+}
+
+div[class*="header"][class*="solidHeader"] {
+    padding-top: 0px;
+    margin-top: -15px;
+}
+
+[class*="_sectionHeader_"] {
+    background: var(--bgeneral);
+}
+
+/* Artist page */
+[data-test="artist-profile-header"] [class*="background"] {
+    margin-top: 35px;
+    height: 500px;
+}
+
+[class*="_backgroundBlur_"] {
+    display: none;
+}
+
+/* Album page and + */
+.mainContent {
+    padding-bottom: var(--miniPlayerHeight);
+}
+
+#main {
+    margin-top: 0px;
+    padding-top: 45px;
+    padding-bottom: var(--miniPlayerHeight);
+    background-color: var(--bgeneral);
+}
+
+[data-test="home-page-feed"] {
+    margin-top: 62px;
+}
+
+[class*="dataContainer"]::before {
+    height: 100% !important;
+}
+
+/* =========================================================
+   PLAYER
+   ========================================================= */
+
+[data-test="footer-player"] {
+    border-radius: 100vh;
+    position: fixed;
+    bottom: 20px;
+    width: 95%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--bg-glass-light) !important;
+    backdrop-filter: var(--blur-glass);
+    border: var(--border-glass);
+    box-shadow: 0px 20px 40px rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-test="left-column-footer-player"], 
+[class*="_leftColumn_"] {
+    overflow: visible !important;
+}
+
+@keyframes spin-lp {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+[class*="imageryContainer"] {
+    border-radius: 100VH !important;
+    scale: 1.1;
+    animation: spin-lp 20s linear infinite !important;
+    box-shadow: var(--moonlight);
+    z-index: 2;
+    position: absolute;
+    outline: var(--border-glass);
+}
+
+[class*="_currentMediaItemDetails_"] {
+    margin-left: 83px;
+}
+
+div:has(> [class*="imageryContainer"]) {
+    position: relative !important;
+    overflow: visible !important;
+}
+
+div:has(> [class*="imageryContainer"])::before {
+    content: "";
+    position: fixed;
+    bottom: 2.5%;
+    left: 2.5%;
+    margin-bottom: -185px; 
+    margin-left: -210px;
+    width: 450px; 
+    height: 450px;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: 50%;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.2;
+    mix-blend-mode: screen;
+    mask-image: radial-gradient(circle, black 0%, transparent 50%);
+}
+
+/* =========================================================
+   NOW PLAYING
+   ========================================================= */
+
+[class*="_nowPlayingContainer_"] {
+    background-color: transparent;
+    background-image: none !important;
+    backdrop-filter: var(--blur-now-playing);
+}
+
+[class*="_bottomGradient_"] {
+    background-image: none;
+}
+
+div[class*="_imageBorder_"] {
+    --border: 0;
+}
+
+[data-test="now-playing"] {
+    box-shadow: none;
+    border: none;
+}
+
+[class*="_leftColumn_"][class*="_albumMediaQueries_"] {
+    margin-top: 15px;
+}
+
+div[class*="_nativeRangeContainer_"] {
+    transform: translateY(-20px) scale(1.2);
+    background-color: var(--bg-solid);
+    border: var(--border-glass);
+    box-shadow: none;
+}
+
+[class*="_nativeRange_"]::after {
+    display: none;
+}
+
+button[data-test="close-now-playing"],
+button[data-test="request-fullscreen"] {
+    background-color: var(--bg-transparent);
+    border: var(--border-glass);
+    transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+}
+
+button[data-test="close-now-playing"]:hover,
+button[data-test="request-fullscreen"]:hover {
+    background-color: var(--bg-button-hover);
+}
+
+/* =========================================================
+   PLAY QUEUE
+   ========================================================= */
+
+#playQueueSidebar {
+    margin-right: -2px;
+    background-color: var(--bg-glass-darker);
+    border: var(--border-glass);
+    backdrop-filter: var(--blur-play-queue);
+    height: 80%;
+}
+
+div[class*="_playQueueWithHeader_"] {
+    gap: 5px;
+    top: 1.5%;
+    right: 1.5%;
+}
+
+div[class*="_playQueueWithoutHeader_"] {
+    gap: 5px;
+    top: 64px;
+    left: 360px;
+    right: auto;
+}
+
+button[data-test^="playqueue-"],
+button[data-test^="nowplaying-playqueue-"] {
+    scale: 0.9;
+    background-color: var(--bg-transparent);
+    border: var(--border-glass);
+    overflow: hidden;
+    transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+}
+
+button[data-test^="playqueue-"]:hover,
+button[data-test^="nowplaying-playqueue-"]:hover {
+    background-color: var(--bg-button-hover);
+}
+
+/* =========================================================
+   MENUS
+   ========================================================= */
+
+[class*="contextMenu"][role="menu"] {
+    position: relative;
+    background-color: var(--bg-transparent);
+    border: var(--border-glass);
+    border-radius: 10px;
+    box-shadow: none;
+}
+
+[class*="contextMenu"][role="menu"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-color: var(--bg-glass-darkest);
+    backdrop-filter: var(--blur-glass);
+    border-radius: inherit;
+}
+
+[class*="contextMenu"][role="menu"] > * {
+    position: relative;
+}
+
+[class*="_subMenu_"] {
+    position: relative;
+    background-color: var(--bg-transparent);
+    border: var(--border-glass);
+    border-radius: 15px;
+    box-shadow: none;
+    overflow: hidden;
+    z-index: 0;
+}
+
+[class*="_subMenu_"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-color: var(--bg-glass-dark);
+    backdrop-filter: var(--blur-glass);
+    border-radius: inherit;
+    z-index: 0;
+}
+
+[class*="_subMenu_"] > * {
+    position: relative;
+    z-index: 1;
+}
+
+[role="menu"][class*="_submenu"] {
+    background-color: var(--bg-glass-dark);
+    backdrop-filter: var(--blur-glass);
+    border: var(--border-glass);
+    border-radius: 10px;
+    box-shadow: none;
+    z-index: 1;
+}
+
+[role="menu"][class*="_submenu"] > * {
+    position: relative;
+    z-index: 2;
+}
+
+div[data-test="query-suggestions"] {
+    height: 75vh;
+    background-color: var(--bgeneral);
+    border: var(--border-glass);
+}
+
+div[data-test="query-suggestions"] div[class*="_icon_"] {
+    background: var(--bg-transparent);
+}
+
+/* =========================================================
+   TOOLTIPS
+   ========================================================= */
+
+[class*="_marketTooltipContainer_"] {
+    position: relative;
+    background-color: var(--bg-glass-dark);
+    backdrop-filter: var(--blur-glass);
+    border: var(--border-glass);
+    color: white;
+}
+
+[class*="_tooltipText_"] {
+    margin-bottom: 10px;
+    background-color: var(--bg-solid-dark);
+    border: var(--border-glass);
+    color: white;
+}
+
+[class*="_tooltipText_"]::after,
+[class*="_sidebarTooltip_"]::after {
+    display: none;
+}
+
+/* =========================================================
+   SCROLLBARS
+   ========================================================= */
+
+* {
+    scrollbar-width: none !important;
+}
+
+.os-scrollbar {
+    display: none;
+}
+
+.is-windows.is-desktop {
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+/* =========================================================
+   SIDEBAR
+   ========================================================= */
+
+[aria-label="Navigation sidebar"] {
+    background-color: var(--bgeneral);
+    padding-top: 30px;
+}
+
+[aria-label="Playlists"] {
+    padding-bottom: 100px;
+}
+/* Playlists */
+[aria-label="Playlists"] [class*="_contentItem_"] {
+    filter: grayscale(10%) opacity(90%); 
+    transition: filter 0.4s ease-in-out;
+}
+
+/* Playlists hover */
+[aria-label="Playlists"] [class*="_contentItem_"]:hover {
+    filter: grayscale(0%) opacity(100%);
+}
+
+/* Playlist Selected */
+[aria-label="Playlists"] [class*="_selected_"] {
+    filter: grayscale(0%) opacity(100%);
+    background: none;
+}
+
+/* =========================================================
+   PLAYLIST
+   ========================================================= */
+
+[class^="_smallHeader_"] {
+    left: 0;
+    padding-left: calc(var(--sidebarWidth) + 40px) !important;
+    padding-right: calc(var(--sidebarWidth) + 20px) !important;
+    background-color: var(--bg-glass-light) !important;
+    backdrop-filter: var(--blur-glass);
+    border-bottom: var(--border-glass);
+}
+
+div[class^="_smallHeader_"]::before {
+    opacity: 0;
+}
+
+[class*="descriptionText"] {
+    color: rgb(239, 238, 205);
+}
+
+/* =========================================================
+   HOME PAGE
+   ========================================================= */
+
+[class*="_shortcutItem_"] {
+    background-color: var(--bg-shortcut) !important;
+    box-shadow: none;
+    border-radius: 7px;
+    filter: grayscale(10%) opacity(90%);
+    transition: filter 0.3s ease-in-out, transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border: var(--border-glass);
+}
+
+[class*="_shortcutItem_"]:hover {
+    background-color: var(--bg-shortcut-hover) !important;
+    filter: grayscale(0%) opacity(100%);
+}
+
+[class*="_card_"] [class*="_imageContainer_"] {
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+/* Normal */
+[class*="_card_"] [class*="_imageContainer_"] {
+    border-radius: 7px;
+    margin-left: 10px;
+    overflow: hidden;
+    filter: grayscale(10%) opacity(90%);
+    transform: translateY(0) scale(1);
+    transition: filter 0.6s ease-in-out, transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Hover */
+[class*="_card_"]:hover [class*="_imageContainer_"] {
+    filter: grayscale(0%) opacity(100%);
+    transform: translateY(-7px) scale(1.05);
+}
+
+/* Overlays */
+[class*="_imageContainer_"] [class*="_overlay_"] {
+    display: none !important;
+}
+
+[class*="_container_"] [class*="_overlay_"] {
+    display: none !important;
+}
+
+[class*="_container_"]:hover [class*="_overlay_"] {
+    display: none !important;
+}
+
+/* =========================================================
+   SEARCH RESULTS
+   ========================================================= */
+   
+[data-test="search-results"] [class*="_container_"]:not(.quality-tag-container) {
+    top: -17px;
+    padding-top: 30px;
+    left: 0;
+    margin-left: -5%;
+    margin-right: -5%;
+    background-color: transparent;
+    backdrop-filter: var(--blur-glass);
+    border-bottom: var(--border-glass);
+}
+
+[class*="_resultsContainer"] {
+    margin-left: 5%;
+    margin-right: 5%;
+}
+
+[class*="_resultsContainer_"],
+[class*="_mobilePageSearch_"] {
+    padding-left: 0px;
+    padding-right: 15px;
+    padding-top: 50px;
+}
+
+[data-test="search-pills"] {
+    margin-left: 50px;
+}
+
+div[class*="_divider_"] {
+    height: 0;
+}
+
+div[data-test="search-results"] div[class*="_container_"]::before,
+div[data-test="search-results"] div[class*="_solidHeader_"]::before {
+    opacity: 0;
+}
