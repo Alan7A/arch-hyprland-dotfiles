@@ -5,10 +5,13 @@
         "enableClipPreview": true,
         "enableClipboardHistory": false,
         "iconMode": "tabler",
+        "ignoreMouseInput": false,
         "pinnedExecs": [
         ],
         "position": "center",
+        "screenshotAnnotationTool": "",
         "showCategories": true,
+        "showIconBackground": true,
         "sortByMostUsed": true,
         "terminalCommand": "kitty -e",
         "useApp2Unit": false,
@@ -68,6 +71,7 @@
                     "followFocusedScreen": false,
                     "groupedBorderOpacity": 1,
                     "hideUnoccupied": false,
+                    "iconScale": 0.8,
                     "id": "Workspace",
                     "labelMode": "index",
                     "showApplications": true,
@@ -125,6 +129,7 @@
                     "showCpuUsage": true,
                     "showDiskUsage": true,
                     "showGpuTemp": true,
+                    "showLoadAverage": false,
                     "showMemoryAsPercent": true,
                     "showMemoryUsage": true,
                     "showNetworkStats": false,
@@ -213,6 +218,7 @@
                 "id": "brightness-card"
             }
         ],
+        "diskPath": "/",
         "position": "top_center",
         "shortcuts": {
             "left": [
@@ -361,6 +367,11 @@
         "weatherShowEffects": true
     },
     "network": {
+        "bluetoothDetailsViewMode": "grid",
+        "bluetoothHideUnnamedDevices": false,
+        "bluetoothRssiPollIntervalMs": 10000,
+        "bluetoothRssiPollingEnabled": false,
+        "wifiDetailsViewMode": "grid",
         "wifiEnabled": true
     },
     "nightLight": {
@@ -430,6 +441,7 @@
     "sessionMenu": {
         "countdownDuration": 10000,
         "enableCountdown": false,
+        "largeButtonsLayout": "grid",
         "largeButtonsStyle": true,
         "position": "center",
         "powerOptions": [
@@ -473,20 +485,21 @@
         "showHeader": true,
         "showNumberLabels": true
     },
-    "settingsVersion": 35,
+    "settingsVersion": 37,
     "systemMonitor": {
         "cpuCriticalThreshold": 90,
         "cpuPollingInterval": 3000,
         "cpuWarningThreshold": 80,
         "criticalColor": "",
         "diskCriticalThreshold": 90,
-        "diskPath": "/",
         "diskPollingInterval": 3000,
         "diskWarningThreshold": 80,
         "enableDgpuMonitoring": true,
+        "externalMonitor": "resources || missioncenter || jdsystemmonitor || corestats || system-monitoring-center || gnome-system-monitor || plasma-systemmonitor || mate-system-monitor || ukui-system-monitor || deepin-system-monitor || pantheon-system-monitor",
         "gpuCriticalThreshold": 90,
         "gpuPollingInterval": 3000,
         "gpuWarningThreshold": 80,
+        "loadAvgPollingInterval": 3000,
         "memCriticalThreshold": 90,
         "memPollingInterval": 3000,
         "memWarningThreshold": 80,
@@ -525,8 +538,7 @@
         "zed": false
     },
     "ui": {
-        "bluetoothDetailsViewMode": "grid",
-        "bluetoothHideUnnamedDevices": false,
+        "boxBorderEnabled": false,
         "fontDefault": "Fira Sans",
         "fontDefaultScale": 1.07,
         "fontFixed": "DejaVu Sans Mono",
@@ -534,8 +546,7 @@
         "panelBackgroundOpacity": 0.9500000000000001,
         "panelsAttachedToBar": true,
         "settingsPanelMode": "window",
-        "tooltipsEnabled": true,
-        "wifiDetailsViewMode": "grid"
+        "tooltipsEnabled": true
     },
     "wallpaper": {
         "directory": "/home/alan7a/Pictures/Wallpapers",
@@ -552,9 +563,11 @@
         "randomIntervalSec": 300,
         "recursiveSearch": false,
         "setWallpaperOnAllMonitors": true,
+        "solidColor": "#1a1a2e",
         "transitionDuration": 1500,
         "transitionEdgeSmoothness": 0.05,
         "transitionType": "random",
+        "useSolidColor": false,
         "useWallhaven": false,
         "wallhavenApiKey": "",
         "wallhavenCategories": "111",

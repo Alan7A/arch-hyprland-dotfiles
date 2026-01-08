@@ -19,12 +19,17 @@ DraggableDesktopWidget {
 
   // Settings from plugin
   readonly property real sensitivity: pluginApi?.pluginSettings?.sensitivity ?? pluginApi?.manifest?.metadata?.defaultSettings?.sensitivity
-  readonly property bool showRings: pluginApi?.pluginSettings?.showRings ?? pluginApi?.manifest?.metadata?.defaultSettings?.showRings
-  readonly property bool showBars: pluginApi?.pluginSettings?.showBars ?? pluginApi?.manifest?.metadata?.defaultSettings?.showBars
   readonly property real rotationSpeed: pluginApi?.pluginSettings?.rotationSpeed ?? pluginApi?.manifest?.metadata?.defaultSettings?.rotationSpeed
   readonly property real barWidth: pluginApi?.pluginSettings?.barWidth ?? pluginApi?.manifest?.metadata?.defaultSettings?.barWidth
   readonly property real ringOpacity: pluginApi?.pluginSettings?.ringOpacity ?? pluginApi?.manifest?.metadata?.defaultSettings?.ringOpacity
   readonly property real bloomIntensity: pluginApi.pluginSettings?.bloomIntensity ?? pluginApi?.manifest?.metadata?.defaultSettings?.bloomIntensity
+  readonly property int visualizationMode: pluginApi?.pluginSettings?.visualizationMode ?? pluginApi?.manifest?.metadata?.defaultSettings?.visualizationMode ?? 3
+  readonly property real waveThickness: pluginApi?.pluginSettings?.waveThickness ?? pluginApi?.manifest?.metadata?.defaultSettings?.waveThickness ?? 1.0
+  readonly property real innerDiameter: pluginApi?.pluginSettings?.innerDiameter ?? pluginApi?.manifest?.metadata?.defaultSettings?.innerDiameter ?? 0.7
+  readonly property bool fadeWhenIdle: pluginApi?.pluginSettings?.fadeWhenIdle ?? false
+  readonly property bool useCustomColors: pluginApi?.pluginSettings?.useCustomColors ?? false
+  readonly property color customPrimaryColor: pluginApi?.pluginSettings?.customPrimaryColor ?? "#6750A4"
+  readonly property color customSecondaryColor: pluginApi?.pluginSettings?.customSecondaryColor ?? "#625B71"
 
   // Animation time for shader (0 to 3600, 1 hour cycle)
   property real shaderTime: 0
@@ -100,6 +105,11 @@ DraggableDesktopWidget {
     id: visualizer
     anchors.fill: parent
     visible: pluginApi !== null
+    opacity: (root.fadeWhenIdle && CavaService.isIdle) ? 0 : 1
+
+    Behavior on opacity {
+      NumberAnimation { duration: 500; easing.type: Easing.InOutQuad }
+    }
 
     // Audio texture - named 'source' to match ShaderEffectSource's property and avoid warning
     property var source: audioTextureSource
@@ -108,16 +118,17 @@ DraggableDesktopWidget {
     property real time: root.shaderTime
     property real itemWidth: visualizer.width
     property real itemHeight: visualizer.height
-    property color primaryColor: Color.mPrimary
-    property color accentColor: Color.mSecondary
+    property color primaryColor: root.useCustomColors ? root.customPrimaryColor : Color.mPrimary
+    property color secondaryColor: root.useCustomColors ? root.customSecondaryColor : Color.mSecondary
     property real sensitivity: root.sensitivity
     property real rotationSpeed: root.rotationSpeed
-    property real showRings: root.showRings ? 1.0 : 0.0
-    property real showBars: root.showBars ? 1.0 : 0.0
     property real barWidth: root.barWidth
     property real ringOpacity: root.ringOpacity
     property real cornerRadius: scaledRadiusL
     property real bloomIntensity: root.bloomIntensity
+    property real visualizationMode: root.visualizationMode
+    property real waveThickness: root.waveThickness
+    property real innerDiameter: root.innerDiameter
 
     fragmentShader: pluginApi ? Qt.resolvedUrl(pluginApi.pluginDir + "/shaders/visualizer.frag.qsb") : ""
   }

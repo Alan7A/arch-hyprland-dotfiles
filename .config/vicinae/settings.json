@@ -27,12 +27,28 @@
    },
    "providers": {
       "applications": {
+         "preferences": {
+            "paths": [
+               "/home/alan7a/.local/share/applications",
+               "/var/lib/flatpak/exports/share/applications",
+               "/usr/share/applications"
+            ]
+         },
          "entrypoints": {
             "jconsole-java-openjdk": {
                "enabled": false
             },
             "jshell-java-openjdk": {
                "enabled": false
+            }
+         }
+      },
+      "clipboard": {
+         "entrypoints": {
+            "history": {
+               "preferences": {
+                  "defaultAction": "copy"
+               }
             }
          }
       }
