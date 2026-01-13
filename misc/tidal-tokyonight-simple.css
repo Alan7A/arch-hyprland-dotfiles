@@ -1,5 +1,6 @@
 :root {
     --background: #16161e;
+    --sidebar-background: #1a1b26;
     --text: #cdd6f4;
     --icons: #cdd6f4;
     --accent: #7aa2f7;
@@ -7,19 +8,23 @@
 }
 
 [class*="main"],
-[class*="sidebar"],
 [class*="_bar"],
 [class*="Header"],
-[class*="header"],
-#footerPlayer {
+[class*="header"] {
     background-color: transparent !important;
+}
+
+[class*="sidebar"],
+#footerPlayer {
+    background-color: var(--sidebar-background) !important;
+}
+[class*="_selected_"] {
+    background-color: var(--surface);
 }
 
 [class*="Header"]::before,
 body {
     background-color: var(--background) !important;
-    color: var(--text);
-    fill: var(--icons);
 }
 
 * {
@@ -27,17 +32,17 @@ body {
     --wave-color-text-main: var(--text);
     --market-core-fill-white-color: var(--icons);
     --wave-color-solid-base-fill: var(--background);
-    --wave-color-solid-base-bright: var(--accent);
+    --wave-color-solid-base-bright: var(--sidebar-background);
     --market-core-surface-10-color: var(--surface);
-    --market-core-surface-20-color: var(--surface);
-    --market-core-surface-30-color: var(--surface);
+    --market-core-surface-20-color: var(--sidebar-background);
+    --market-core-surface-30-color: var(--sidebar-background);
 }
 
 [class*="indicator"],
 [class*="marketButton"],
 [class*="Header"]::before,
 [class*="_contextMenu_"] {
-    background-color: var(--accent);
+    background-color: var(--sidebar-background) !important;
 }
 
 [class*="Text"] {
@@ -50,4 +55,12 @@ select {
 
 option {
     background-color: var(--surface);
+}
+
+[class*="_shortcutItem_"] {
+    background-color: var(--sidebar-background) !important;
+}
+
+[class*="_favorite_"] {
+    color: var(--accent) !important;
 }
