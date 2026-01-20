@@ -88,13 +88,15 @@ paru -S --noconfirm \
   yazi \
   7zip \
   resvg \
-  dragon-drop \
+  ripdrag-git \
   cava \
+  satty \
 
 # Programs
 paru -S --noconfirm \
   visual-studio-code-bin \
   zen-browser-bin \
+  helium-browser-bin \
   tidal-hifi-bin \
   localsend-bin \
   vesktop-bin \

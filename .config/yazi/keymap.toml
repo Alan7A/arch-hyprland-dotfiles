@@ -25,5 +25,9 @@ desc = "Yank selected files"
 
 [[mgr.prepend_keymap]]
 on   = "<C-n>"
-run  = 'shell -- dragon-drop -x -i -T "$0"'
-desc = "Drag and drop files"
+run  = "shell -- ripdrag %s -x -a 2>/dev/null &"
+desc = "Drag Files"
+
+[[mgr.prepend_keymap]]
+on  = "M"
+run = "plugin mount"
