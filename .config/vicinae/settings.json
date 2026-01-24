@@ -9,6 +9,7 @@
 // Learn more about configuration at https://docs.vicinae.com/config
 
 {
+   "$schema": "https://vicinae.com/schemas/config.json",
    "pop_to_root_on_close": true,
    "font": {
       "normal": {
@@ -23,7 +24,7 @@
       }
    },
    "launcher_window": {
-      "opacity": 0.75
+      "opacity": 0.65
    },
    "providers": {
       "applications": {

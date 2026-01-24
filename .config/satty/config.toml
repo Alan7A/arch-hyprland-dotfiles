@@ -4,3 +4,4 @@ early-exit = true
 corner-roundness = 6
 # Select the tool on startup [possible values: pointer, crop, line, arrow, rectangle, text, marker, blur, brush]
 initial-tool = "rectangle"
+copy-command = "wl-copy"
