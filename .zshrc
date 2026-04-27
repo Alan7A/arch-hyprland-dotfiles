@@ -106,7 +106,7 @@ source $ZSH/oh-my-zsh.sh
 #
 # Example aliases
 alias up="paru -Syu; flatpak update"
-alias emulator="QT_QPA_PLATFORM=xcb ~/Android/Sdk/emulator/emulator -avd Medium_Phone"
+alias emulatoropen="emulator -avd pixel_7"
 alias switchjava="sudo alternatives --config java"
 alias ga="git add ."
 alias gc="git commit"
@@ -138,7 +138,7 @@ function y() {
 }
 
 # Defaults
-export EDITOR=nvim
+export EDITOR=fresh
 
 # Zoxide
 eval "$(zoxide init zsh)"
@@ -179,3 +179,9 @@ esac
 
 # opencode
 export PATH=/home/alan7a/.opencode/bin:$PATH
+
+# Android emulator
+export ANDROID_HOME=/opt/android-sdk
+export PATH=$PATH:$ANDROID_HOME/emulator
+export PATH=$PATH:$ANDROID_HOME/platform-tools
+export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin

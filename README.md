@@ -68,7 +68,7 @@ paru -S --noconfirm \
   qt5-wayland \
   qt6-wayland \
   hyprqt6engine \
-  quickshell \
+  noctalia-qs \
   noctalia-shell \
 
 # Terminal and system tools
@@ -91,13 +91,15 @@ paru -S --noconfirm \
   ripdrag-git \
   cava \
   satty \
+  topgrade \
+  fresh-editor-bin \
 
 # Programs
 paru -S --noconfirm \
   visual-studio-code-bin \
   zen-browser-bin \
   helium-browser-bin \
-  tidal-hifi-bin \
+  sone \
   localsend-bin \
   vesktop-bin \
   obsidian-bin \
