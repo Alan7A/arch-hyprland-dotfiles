@@ -105,7 +105,7 @@ source $ZSH/oh-my-zsh.sh
 # For a full list of active aliases, run `alias`.
 #
 # Example aliases
-alias up="paru -Syu; flatpak update"
+alias up="topgrade"
 alias emulatoropen="emulator -avd pixel_7"
 alias switchjava="sudo alternatives --config java"
 alias ga="git add ."
