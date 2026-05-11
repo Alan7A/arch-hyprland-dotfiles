@@ -204,7 +204,7 @@ rules = [
 	# { mime = "inode/x-empty", fg = "#f7768e" },
 
 	# Special files
-	{ name = "*", is = "orphan", bg = "#f7768e" },
+	{ url = "*", is = "orphan", bg = "#f7768e" },
 	{ url = "*", is = "exec"  , fg = "#9ece6a" },
 
 	# Fallback
