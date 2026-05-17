@@ -1,0 +1,65 @@
+-------------
+-- PLUGINS --
+-------------
+
+-- hl.permission({
+--   binary = "/usr/(bin|local/bin)/hyprpm",
+--   type = "plugin",
+--   allow = "allow"
+-- })
+
+local function toggle_hymission()
+  -- Hyprland 0.55 docs do not currently document plugin dispatchers.
+  -- If hymission exposes a Lua dispatcher namespace, this keeps the old bind active.
+  if hl.dsp.hymission and hl.dsp.hymission.toggle then
+    hl.dispatch(hl.dsp.hymission.toggle())
+  end
+end
+
+hl.bind("SUPER + TAB", hl.plugin.hymission.toggle)
+
+hl.plugin.hymission.gesture({
+  fingers = 4,
+  direction = "vertical",
+  action = "toggle",
+  args = "forceall",
+})
+
+hl.config({
+  plugin = {
+    hymission = {
+      toggle_switch_mode = 0,
+      switch_release_key = "Super_L",
+      switch_toggle_auto_next = 1,
+      expand_selected_window = 1,
+      multi_workspace_sort_recent_first = 1,
+      one_workspace_per_row = 0,
+      outer_padding_top = 132,
+      outer_padding_right = 32,
+      outer_padding_bottom = 96,
+      outer_padding_left = 32,
+      row_spacing = 32,
+      column_spacing = 32,
+      min_window_length = 120,
+      small_window_boost = 1.35,
+      max_preview_scale = 0.95,
+      min_slot_scale = 0.10,
+      layout_scale_weight = 1.0,
+      layout_space_weight = 0.10,
+      overview_focus_follows_mouse = 1,
+      only_active_workspace = 0,
+      workspace_change_keeps_overview = 1,
+      hide_bar_when_strip = 1,
+      hide_bar_animation = 1,
+      hide_bar_animation_blur = 1,
+      hide_bar_animation_move_multiplier = 0.8,
+      hide_bar_animation_scale_divisor = 1.1,
+      hide_bar_animation_alpha_end = 0,
+      bar_single_mission_control = 0,
+      show_focus_indicator = 0,
+      workspace_strip_anchor = "left",
+      workspace_strip_thickness = 160,
+      workspace_strip_gap = 24,
+    },
+  },
+})
