@@ -1,0 +1,142 @@
+[bar.default]
+background_opacity = 0.62000000476837158
+capsule = true
+capsule_radius = 6.0
+center = [ "clock", "screenshot" ]
+end = [ "media", "group:g1", "tray", "volume", "notifications", "session" ]
+margin_edge = 0
+margin_ends = 0
+padding = 6
+radius = 0
+shadow = false
+start = [ "control-center", "taskbar", "active_window" ]
+
+    [[bar.default.capsule_group]]
+    fill = "surface_variant"
+    id = "g1"
+    members = [ "ram", "cpu" ]
+    opacity = 1.0
+    padding = 6.0
+    radius = 6.0
+
+[config]
+
+[lockscreen_widgets]
+enabled = false
+schema_version = 2
+widget_order = [ "lockscreen-login-box@Virtual-1" ]
+
+    [lockscreen_widgets.grid]
+    cell_size = 16
+    major_interval = 4
+    visible = true
+
+    [lockscreen_widgets.widget."lockscreen-login-box@Virtual-1"]
+    box_height = 0.0
+    box_width = 0.0
+    cx = 960.0
+    cy = 957.0
+    output = "Virtual-1"
+    rotation = 0.0
+    type = "login_box"
+
+        [lockscreen_widgets.widget."lockscreen-login-box@Virtual-1".settings]
+        background_color = "surface_variant"
+        background_opacity = 0.88
+        background_radius = 12.0
+        input_opacity = 1.0
+        input_radius = 6.0
+        show_login_button = true
+
+[nightlight]
+enabled = false
+
+[osd]
+offset_y = 80
+position = "bottom_center"
+
+[plugins]
+enabled = [ "noctalia/screen_recorder" ]
+
+[shell]
+avatar_path = "/home/alan7a/Pictures/user-icon.jpg"
+password_style = "random"
+polkit_agent = true
+settings_show_advanced = true
+telemetry_enabled = true
+
+    [shell.screen_corners]
+    enabled = false
+
+    [[shell.session.actions]]
+    action = "shutdown"
+    enabled = true
+    shortcut = "s"
+    variant = "destructive"
+
+    [[shell.session.actions]]
+    action = "reboot"
+    enabled = true
+    shortcut = "r"
+    variant = "default"
+
+    [[shell.session.actions]]
+    action = "logout"
+    enabled = true
+    shortcut = "e"
+    variant = "default"
+
+    [[shell.session.actions]]
+    action = "lock_and_suspend"
+    enabled = true
+    shortcut = "u"
+    variant = "default"
+
+    [[shell.session.actions]]
+    action = "lock"
+    enabled = true
+    shortcut = "l"
+    variant = "default"
+
+[theme]
+builtin = "Tokyo-Night"
+source = "builtin"
+
+    [theme.templates]
+    builtin_ids = [ "btop", "gtk3", "gtk4", "hyprland", "kcolorscheme" ]
+
+[wallpaper]
+directory = "~/Pictures/Wallpapers"
+
+    [wallpaper.default]
+    path = "/home/alan7a/Pictures/Wallpapers/space.jpg"
+
+    [wallpaper.monitors.Virtual-1]
+    path = "/home/alan7a/Pictures/Wallpapers/space.jpg"
+
+[widget.clock]
+color = "primary"
+font_weight = 700
+format = "{:%-I:%M %p - %A %b %-d}"
+
+[widget.control-center]
+glyph = "hyprland"
+
+[widget.cpu]
+capsule = true
+
+[widget.media]
+art_size = 33.0
+hide_when_no_media = true
+max_length = 379
+title_scroll = "always"
+
+[widget.ram]
+capsule = true
+
+[widget.taskbar]
+group_by_workspace = true
+
+[widget.workspaces]
+label_source = "id"
+show_labels = true
