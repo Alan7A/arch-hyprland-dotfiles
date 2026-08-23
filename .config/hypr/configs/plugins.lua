@@ -2,11 +2,7 @@
 -- PLUGINS --
 -------------
 
--- hl.permission({
---   binary = "/usr/(bin|local/bin)/hyprpm",
---   type = "plugin",
---   allow = "allow"
--- })
+hl.permission("/usr/(bin|local/bin)/hyprpm", "plugin", "allow")
 
 local function toggle_hymission()
   -- Hyprland 0.55 docs do not currently document plugin dispatchers.

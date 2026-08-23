@@ -23,3 +23,6 @@ require("configs.lookAndFeel")
 require("configs.input")
 require("configs.rules")
 require("configs.plugins")
+
+-- For Noctalia Color templates
+require("noctalia").apply_theme()

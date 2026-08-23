@@ -87,11 +87,6 @@ hl.bind(mainMod .. " + XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume 
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 1%-"), with_description("Decrease volume", { locked = true, repeating = true }))
 hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), with_description("Toggle audio mute", { locked = true }))
 
--- hl.bind("XF86InputRaiseVolume", hl.dsp.exec_cmd("swayosd-client --input-volume raise"), with_description("Increase microphone volume", { locked = true, repeating = true }))
--- hl.bind("XF86InputLowerVolume", hl.dsp.exec_cmd("swayosd-client --input-volume lower"), with_description("Decrease microphone volume", { locked = true, repeating = true }))
--- hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("exec swayosd-client --input-volume mute-toggle"), with_description("Toggle microphone mute", { locked = true }))
--- hl.bind(thumbButton, hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"), with_description("Toggle microphone mute", { locked = true }))
-
 hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), with_description("Toggle media play/pause", { locked = true }))
 hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), with_description("Toggle media play/pause", { locked = true }))
 hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), with_description("Skip to next media track", { locked = true }))
@@ -100,6 +95,13 @@ hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), with_description
 hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("swayosd-client --brightness raise"), with_description("Increase brightness", { locked = true, repeating = true }))
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("swayosd-client --brightness lower"), with_description("Decrease brightness", { locked = true, repeating = true }))
 
-bind_exec("PRINT", "hyprshot -m region --freeze", "Take region screenshot")
-bind_exec(mainMod .. " + PRINT", "hyprshot -m region --freeze --raw | satty -f -", "Take region screenshot and edit")
-bind_exec(mainMod .. " + ALT + PRINT", "hyprshot -m output DP-1", "Take DP-1 screenshot")
+-- Screenshot
+bind_exec("PRINT", "/home/alan7a/.local/bin/omasnap --copy --save", "Take region screenshot and edit")
+bind_exec(
+  mainMod .. " + PRINT",
+  "/home/alan7a/.local/bin/omasnap",
+  "Screenshot"
+)
+-- bind_exec("PRINT", "hyprshot -m region --freeze", "Take region screenshot")
+-- bind_exec(mainMod .. " + PRINT", "hyprshot -m region --freeze --raw | satty -f -", "Take region screenshot and edit")
+-- bind_exec(mainMod .. " + ALT + PRINT", "hyprshot -m output DP-1", "Take DP-1 screenshot")
