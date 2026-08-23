@@ -1,12 +1,12 @@
 [[plugin.deps]]
 use = "yazi-rs/plugins:mount"
-rev = "5d5c480"
-hash = "e3260d0b1feded8c8e3ae3afa1169e30"
+rev = "56d6277"
+hash = "46cbdc05596a3ecd730b288e28c7079d"
 
 [[plugin.deps]]
 use = "simla33/ucp"
-rev = "b74651d"
-hash = "a008e4f6e4222f282472044bec7df1ef"
+rev = "79043fb"
+hash = "dee1ba1aa0085616b90022b1f2fafc50"
 
 [flavor]
 deps = []
