@@ -26,7 +26,7 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 | **Window Manager** | `hyprland` and ecosystem (`hyprpicker`, `hyprshot`, `hyprlock`, `hypridle`, `hyprpaper`, `hyprcursor`, `hyprsunset`, `hyprpolkitagent`, `xdg-desktop-portal-hyprland`, `hyprqt6engine`) |
 | **Terminal & Shell** | `kitty`, `zsh`, `oh-my-zsh`, `fresh-editor-bin`, `paru`, `quickshell`, `noctalia-shell` |
 | **Application Launcher** | `vicinae` |
-| **System Utilities** | `wlogout`, `fastfetch`, `playerctl`, `solaar`, `kdeconnect`, `nautilus-admin-gtk4`, `nautilus-image-converter`, `nautilus-open-any-terminal`  |
+| **System Utilities** | [omasnap](https://github.com/tobi/omasnap), `fastfetch`, `playerctl`, `solaar`, `kdeconnect`, `nautilus-admin-gtk4`, `nautilus-image-converter`, `nautilus-open-any-terminal`  |
 | **Appearance** | `breezex-cursor-theme`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine`, `nwg-look`, `qt5-wayland`, `ttf-cascadia-mono-nerd`  |
 | **Miscellaneous** | `stow` |    
 
@@ -55,11 +55,6 @@ makepkg -si
 # Hyprland and related tools
 paru -S --noconfirm \
   hyprland \
-  hyprpicker \
-  hyprshot \
-  hyprlock \
-  hypridle \
-  hyprpaper \
   hyprcursor \
   hyprsunset \
   hyprpolkitagent \
@@ -68,14 +63,12 @@ paru -S --noconfirm \
   qt5-wayland \
   qt6-wayland \
   hyprqt6engine \
-  noctalia-qs \
   noctalia-shell \
 
 # Terminal and system tools
 paru -S --noconfirm \
   fresh-editor-bin \
   fastfetch \
-  wlogout \
   solaar \
   playerctl \
   stow \
@@ -88,11 +81,8 @@ paru -S --noconfirm \
   yazi \
   7zip \
   resvg \
-  ripdrag-git \
   cava \
-  satty \
   topgrade \
-  fresh-editor-bin \
 
 # Programs
 paru -S --noconfirm \
