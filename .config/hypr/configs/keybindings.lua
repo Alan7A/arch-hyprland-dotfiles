@@ -12,7 +12,7 @@ local thumbButton = "mouse:277"
 local emojiPicker = "vicinae vicinae://extensions/vicinae/core/search-emojis"
 local resourceManager = "flatpak run io.missioncenter.MissionCenter"
 local clipboard = "vicinae vicinae://launch/clipboard/history"
-local powerMenu = "wlogout -b 5 -T 500 -R 650 -B 500 -L 650 -s"
+local powerMenu = "noctalia msg panel-toggle session"
 local toggleHyprsunset = "pgrep -x hyprsunset >/dev/null && pkill hyprsunset || hyprsunset -t 3800"
 local mainMod = "SUPER"
 
@@ -39,7 +39,7 @@ bind_exec("CTRL + SHIFT + Escape", resourceManager, "Launch resource manager")
 bind_exec(mainMod .. " + Escape", powerMenu, "Launch power menu")
 bind_exec(mainMod .. " + period", emojiPicker, "Launch emoji picker")
 bind_exec(mainMod .. " + X", clipboard, "Launch clipboard manager")
-bind_exec(mainMod .. " + L", "hyprlock", "Lock screen")
+bind_exec(mainMod .. " + L", "noctalia msg session lock", "Lock screen")
 hl.bind(mainMod .. " + M", hl.dsp.window.fullscreen({ mode = "maximized" }), with_description("Toggle fullscreen"))
 hl.bind(mainMod .. " + Y", hl.dsp.window.float({ action = "toggle" }), with_description("Toggle floating"))
 hl.bind(mainMod .. " + O", hl.dsp.layout("togglesplit"), with_description("Toggle split"))
