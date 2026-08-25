@@ -35,9 +35,9 @@ fi
 
 echo -e "${GREEN}==> Installing main packages with paru...${NC}"
 paru -S --noconfirm --needed \
-  hyprland hyprpanel wofi vim neofetch wlogout solaar \
+  hyprland hyprpanel wofi fresh-editor-bin neofetch wlogout solaar \
   xcursor-breeze numix-circle-icon-theme-git clipse \
-  hyprpicker hyprshot hyprlock hypridle hyprpaper hyprcursor hyprsunset \
+  hyprpicker hyprcursor hyprsunset \
   gtk-engine-murrine wf-recorder ttf-fira-sans playerctl stow zsh ttf-meslo-nerd \
   kdeconnect
 

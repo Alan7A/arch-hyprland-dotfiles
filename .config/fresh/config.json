@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "theme": "https://github.com/sinelaw/fresh-plugins#catppuccin-macchiato",
+  "file_explorer": {
+    "show_hidden": true
+  }
+}

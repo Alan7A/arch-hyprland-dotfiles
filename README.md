@@ -24,7 +24,7 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 | Category | Packages |
 |----------|----------|
 | **Window Manager** | `hyprland` and ecosystem (`hyprpicker`, `hyprshot`, `hyprlock`, `hypridle`, `hyprpaper`, `hyprcursor`, `hyprsunset`, `hyprpolkitagent`, `xdg-desktop-portal-hyprland`, `hyprqt6engine`) |
-| **Terminal & Shell** | `kitty`, `zsh`, `oh-my-zsh`, `neovim`, `paru`, `quickshell`, `noctalia-shell` |
+| **Terminal & Shell** | `kitty`, `zsh`, `oh-my-zsh`, `fresh-editor-bin`, `paru`, `quickshell`, `noctalia-shell` |
 | **Application Launcher** | `vicinae` |
 | **System Utilities** | `wlogout`, `fastfetch`, `playerctl`, `solaar`, `kdeconnect`, `nautilus-admin-gtk4`, `nautilus-image-converter`, `nautilus-open-any-terminal`  |
 | **Appearance** | `breezex-cursor-theme`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine`, `nwg-look`, `qt5-wayland`, `ttf-cascadia-mono-nerd`  |
@@ -73,7 +73,7 @@ paru -S --noconfirm \
 
 # Terminal and system tools
 paru -S --noconfirm \
-  neovim \
+  fresh-editor-bin \
   fastfetch \
   wlogout \
   solaar \
@@ -170,7 +170,7 @@ git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:
 
 ```sh
 git config --global init.defaultBranch main
-git config --global core.editor "nvim"
+git config --global core.editor "fresh"
 git config --global user.email "you@example.com"
 git config --global user.name "Your Name"
 ```

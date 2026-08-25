@@ -90,11 +90,11 @@ source $ZSH/oh-my-zsh.sh
 # export LANG=en_US.UTF-8
 
 # Preferred editor for local and remote sessions
-# if [[ -n $SSH_CONNECTION ]]; then
-#   export EDITOR='vim'
-# else
-#   export EDITOR='mvim'
-# fi
+if [[ -n $SSH_CONNECTION ]]; then
+  export EDITOR='fresh'
+else
+  export EDITOR='fresh'
+fi
 
 # Compilation flags
 # export ARCHFLAGS="-arch x86_64"
@@ -114,8 +114,8 @@ alias gca="git commit --amend --no-edit --no-verify"
 alias gp="git push"
 alias gs="git status"
 alias yay="paru"
-alias nano="nvim"
-alias vim='nvim'
+alias nano="fresh"
+alias vim='fresh'
 alias ls="eza -lh --group-directories-first --icons=auto"
 alias lsa="ls -a"
 alias cd="zd"
