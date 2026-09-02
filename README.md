@@ -89,7 +89,7 @@ paru -S --noconfirm \
   visual-studio-code-bin \
   zen-browser-bin \
   helium-browser-bin \
-  sone \
+  sone-bin \
   localsend-bin \
   vesktop-bin \
   obsidian-bin \

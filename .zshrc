@@ -116,6 +116,7 @@ alias gs="git status"
 alias yay="paru"
 alias nano="fresh"
 alias vim='fresh'
+alias op='OPENCODE_EXPERIMENTAL_PLAN_MODE=1 opencode'
 alias ls="eza -lh --group-directories-first --icons=auto"
 alias lsa="ls -a"
 alias cd="zd"
