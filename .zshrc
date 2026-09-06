@@ -108,7 +108,7 @@ fi
 #
 # Example aliases
 alias up="topgrade"
-alias emulatoropen="emulator -avd pixel_7"
+alias android-emu="emulator -avd Pixel7 -gpu host"
 alias switchjava="sudo alternatives --config java"
 alias ga="git add ."
 alias gc="git commit"
@@ -150,11 +150,6 @@ eval "$(zoxide init zsh)"
 export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude node_modules'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 
-# React Native Environment Variables
-export ANDROID_SDK_ROOT=/home/alan7a/Android/Sdk
-export PATH=$PATH:$ANDROID_SDK_ROOT/emulator
-export PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools
-
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
@@ -185,6 +180,7 @@ export PATH=/home/alan7a/.opencode/bin:$PATH
 
 # Android emulator
 export ANDROID_HOME=/opt/android-sdk
-export PATH=$PATH:$ANDROID_HOME/emulator
-export PATH=$PATH:$ANDROID_HOME/platform-tools
+export ANDROID_SDK_ROOT=$ANDROID_HOME
 export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+export PATH=$PATH:$ANDROID_HOME/platform-tools
+export PATH=$PATH:$ANDROID_HOME/emulator
