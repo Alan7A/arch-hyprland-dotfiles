@@ -10,7 +10,7 @@ local editor = "code"
 local discord = "vesktop"
 local thumbButton = "mouse:277"
 local emojiPicker = "vicinae vicinae://extensions/vicinae/core/search-emojis"
-local resourceManager = "flatpak run io.missioncenter.MissionCenter"
+local resourceManager = "kitty btop"
 local clipboard = "vicinae vicinae://launch/clipboard/history"
 local powerMenu = "noctalia msg panel-toggle session"
 local toggleHyprsunset = "pgrep -x hyprsunset >/dev/null && pkill hyprsunset || hyprsunset -t 3800"
@@ -81,27 +81,28 @@ hl.bind(mainMod .. " + mouse_up", hl.dsp.focus({ workspace = "e-1" }), with_desc
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(), with_description("Move window with mouse", { mouse = true }))
 hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), with_description("Resize window with mouse", { mouse = true }))
 
-hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 1%+"), with_description("Increase volume", { locked = true, repeating = true }))
-hl.bind(mainMod .. " + XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"), with_description("Decrease volume by 5%", { locked = true, repeating = true }))
-hl.bind(mainMod .. " + XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"), with_description("Increase volume by 5%", { locked = true, repeating = true }))
-hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 1%-"), with_description("Decrease volume", { locked = true, repeating = true }))
-hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), with_description("Toggle audio mute", { locked = true }))
+-- Media controls
+hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("noctalia msg media toggle"), with_description("Toggle media play/pause", { locked = true }))
+hl.bind("XF86AudioPause", hl.dsp.exec_cmd("noctalia msg media pause"), with_description("Toggle media play/pause", { locked = true }))
+hl.bind("XF86AudioNext", hl.dsp.exec_cmd("noctalia msg media next"), with_description("Skip to next media track", { locked = true }))
+hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("noctalia msg media previous"), with_description("Skip to previous media track", { locked = true }))
 
-hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), with_description("Toggle media play/pause", { locked = true }))
-hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), with_description("Toggle media play/pause", { locked = true }))
-hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), with_description("Skip to next media track", { locked = true }))
-hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), with_description("Skip to previous media track", { locked = true }))
+-- Audio volume controls
+hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("noctalia msg volume-up 1"), with_description("Increase volume", { locked = true, repeating = true }))
+hl.bind(mainMod .. " + XF86AudioLowerVolume", hl.dsp.exec_cmd("noctalia msg volume-down"), with_description("Decrease volume by 5%", { locked = true, repeating = true }))
+hl.bind(mainMod .. " + XF86AudioRaiseVolume", hl.dsp.exec_cmd("noctalia msg volume-up"), with_description("Increase volume by 5%", { locked = true, repeating = true }))
+hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("noctalia msg volume-down 1"), with_description("Decrease volume", { locked = true, repeating = true }))
+hl.bind("XF86AudioMute", hl.dsp.exec_cmd("noctalia msg volume-mute"), with_description("Toggle audio mute", { locked = true }))
 
+
+-- Screen brightness
 hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("swayosd-client --brightness raise"), with_description("Increase brightness", { locked = true, repeating = true }))
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("swayosd-client --brightness lower"), with_description("Decrease brightness", { locked = true, repeating = true }))
 
 -- Screenshot
-bind_exec("PRINT", "/home/alan7a/.local/bin/omasnap --copy --save", "Take region screenshot and edit")
+bind_exec("PRINT", "omasnap --copy --save", "Take region screenshot and edit")
 bind_exec(
   mainMod .. " + PRINT",
-  "/home/alan7a/.local/bin/omasnap",
+  "omasnap",
   "Screenshot"
 )
--- bind_exec("PRINT", "hyprshot -m region --freeze", "Take region screenshot")
--- bind_exec(mainMod .. " + PRINT", "hyprshot -m region --freeze --raw | satty -f -", "Take region screenshot and edit")
--- bind_exec(mainMod .. " + ALT + PRINT", "hyprshot -m output DP-1", "Take DP-1 screenshot")

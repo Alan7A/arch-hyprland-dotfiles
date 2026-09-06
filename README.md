@@ -83,6 +83,7 @@ paru -S --noconfirm \
   resvg \
   cava \
   topgrade \
+  omasnap-bin \
 
 # Programs
 paru -S --noconfirm \
@@ -213,3 +214,4 @@ sudo firewall-cmd --reload
   ```sh
   sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/bobafetthotmail/refind-theme-regular/master/install.sh)"
   ```
+  - Large icon size

@@ -27,7 +27,6 @@ hl.config({
       toggle_switch_mode = 0,
       switch_release_key = "Super_L",
       switch_toggle_auto_next = 1,
-      expand_selected_window = 1,
       multi_workspace_sort_recent_first = 1,
       one_workspace_per_row = 0,
       outer_padding_top = 132,
