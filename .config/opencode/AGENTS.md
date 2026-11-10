@@ -3,6 +3,7 @@
 - If you have to interact with GitHub, use the GitHub CLI (gh)
 - Always write code in english, even if the prompt is in spanish 
 - Respond in the same language of the prompt
+- Always use english in code, commits and pull requests
 
 ## Plan Mode
 

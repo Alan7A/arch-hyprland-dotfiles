@@ -53,6 +53,29 @@
                }
             }
          }
+      },
+      "dictation": {
+         "preferences": {
+            "model": "local:whisper-large-v3-turbo-q5_0",
+            "language": "es",
+            "sound": true,
+            "pauseMedia": true,
+            "dictationAction": "paste"
+         },
+         "entrypoints": {
+            "dictate": {
+               "shortcut": "F7"
+            }
+         }
+      },
+      "snippets": {
+         "preferences": {
+            "enabled": true,
+            "undo": true,
+            "layout": "",
+            "prePasteDelay": "0",
+            "keyDelay": "2"
+         }
       }
    }
 }

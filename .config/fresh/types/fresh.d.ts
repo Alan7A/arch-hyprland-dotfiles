@@ -37,6 +37,8 @@ declare function registerHandler(name: string, fn: Function): void;
 interface ProcessHandle<T> extends PromiseLike<T> {
 	/** Promise that resolves to the result when complete */
 	readonly result: Promise<T>;
+	/** Id of the spawned process (the `process_id` in onProcessStdout/onProcessStderr payloads) */
+	readonly processId: number;
 	/** Cancel/kill the operation. Returns true if cancelled, false if already completed */
 	kill(): Promise<boolean>;
 }
@@ -99,13 +101,18 @@ interface MouseClickHookArgs {
 * registry entry automatically.
 */
 interface FreshPluginRegistry {}
+/**
+* Entry for virtual buffer content with optional text properties
+*/
 type TextPropertyEntry = {
 	/**
-	* Text content for this entry
+	* Text content for this entry. Entries are concatenated verbatim, so
+	* end the text with a newline to put the entry on a line of its own.
 	*/
 	text: string;
 	/**
-	* Optional properties attached to this text (e.g., file path, line number)
+	* Optional properties attached to this text (e.g., file path, line
+	* number): arbitrary metadata, read back with `getTextPropertiesAtCursor`
 	*/
 	properties?: Record<string, unknown>;
 	/**
@@ -117,31 +124,39 @@ type TextPropertyEntry = {
 	*/
 	inlineOverlays?: Array<InlineOverlay>;
 	/**
-	* Pad this entry's text with spaces to this many columns when drawing.
+	* Pad this entry's text with spaces to this many columns (Unicode
+	* codepoints) when drawing. No-op when the text already has at least
+	* this many codepoints. Applied before overlays are resolved.
 	*
 	* **Render-only**: the padding is applied at draw time, so
 	* `getBufferText()` returns the unpadded text you supplied. Column
 	* alignment cannot be checked by reading the buffer back — if you need
 	* that, embed real spaces with `padEnd` instead.
-	*
-	* See `TextPropertyEntry::pad_to_chars`.
 	*/
 	padToChars?: number;
 	/**
-	* Truncate this entry's text to at most this many columns when drawing,
-	* with an ellipsis when the budget allows one.
+	* Truncate this entry's text to at most this many columns (Unicode
+	* codepoints) when drawing. When the budget is greater than 3 the
+	* truncated tail is replaced with `...`; when it is 3 or less the text
+	* is cut at exactly the budget. Applied before `padToChars` and before
+	* overlays are resolved.
 	*
 	* **Render-only**, like `padToChars`: `getBufferText()` returns the full
 	* untruncated text.
-	*
-	* See `TextPropertyEntry::truncate_to_chars`.
 	*/
 	truncateToChars?: number;
 	/**
-	* See `TextPropertyEntry::segments`.
+	* Build the entry from styled pieces. When non-empty, the host joins
+	* the segments' text into `text` (replacing any `text` you supplied)
+	* and adds an inline overlay over each styled segment, plus each
+	* segment's own `overlays` shifted to its position. Resolved before
+	* `truncateToChars` and `padToChars`.
 	*/
 	segments?: Array<StyledSegment>;
 };
+/**
+* Layout configuration for composite buffers
+*/
 type TsCompositeLayoutConfig = {
 	/**
 	* Layout type: "side-by-side", "stacked", or "unified"
@@ -160,13 +175,16 @@ type TsCompositeLayoutConfig = {
 	*/
 	spacing?: number;
 };
+/**
+* Source pane configuration for composite buffers
+*/
 type TsCompositeSourceConfig = {
 	/**
-	* Buffer ID of the source buffer (required)
+	* ID of the source buffer this pane displays (required)
 	*/
 	bufferId: number;
 	/**
-	* Label for this pane (e.g., "OLD", "NEW")
+	* Label for this pane (e.g., "OLD", "NEW"), shown in the pane's header
 	*/
 	label: string;
 	/**
@@ -178,10 +196,12 @@ type TsCompositeSourceConfig = {
 	*/
 	style: TsCompositePaneStyle | null;
 };
+/**
+* Style configuration for a composite pane
+*/
 type TsCompositePaneStyle = {
 	/**
 	* Background color for added lines (RGB)
-	* Using [u8; 3] instead of (u8, u8, u8) for better rquickjs_serde compatibility
 	*/
 	addBg?: [number, number, number];
 	/**
@@ -197,6 +217,9 @@ type TsCompositePaneStyle = {
 	*/
 	gutterStyle?: string;
 };
+/**
+* Diff hunk for composite buffer alignment
+*/
 type TsCompositeHunk = {
 	/**
 	* Starting line in old buffer (0-indexed)
@@ -223,6 +246,132 @@ type TsCompositeHunk = {
 	*/
 	ops?: string;
 };
+/**
+* One side of a [`CompareHunk`]: where the hunk's lines are, in lines and
+* in the buffer's own bytes.
+*/
+type CompareSide = {
+	/**
+	* First line of the hunk on this side (0-based).
+	*/
+	start: number;
+	/**
+	* Number of lines (0 when the other side alone has lines here).
+	*/
+	count: number;
+	/**
+	* Byte offset of the hunk's first line — for an empty side, where the
+	* other side's lines would go.
+	*/
+	from: number;
+	/**
+	* Byte offset just past the hunk's last line, terminator included.
+	* `from..to` is what replacing this side's lines of the hunk replaces.
+	*/
+	to: number;
+	/**
+	* Where a jump to the hunk puts this side's cursor: `from`, or, for an
+	* empty side, the start of the line before the gap — the line a view's
+	* filler rows for the other side's lines go under, so the cursor sits
+	* at the change rather than past it. At the very top of the text, where
+	* there is no line before, `from`.
+	*/
+	jump: number;
+	/**
+	* Each line's text without its line terminator, as `[start, end)`
+	* byte offsets.
+	*/
+	lines: Array<[number, number]>;
+	/**
+	* For the lines that have a counterpart on the other side (the first
+	* `min(count, other.count)`): the part that differs from it, as
+	* `[start, end)` byte offsets, or `null` when only the line terminator
+	* differs.
+	*/
+	spans: Array<[number, number] | null>;
+};
+/**
+* One hunk of a [`CompareResult`], with the geometry a side-by-side view
+* paints from.
+*/
+type CompareHunk = {
+	/**
+	* The first (left, old) text's side.
+	*/
+	left: CompareSide;
+	/**
+	* The second (right, new) text's side.
+	*/
+	right: CompareSide;
+	/**
+	* The two sides have the same lines but for their terminators: a
+	* missing final newline, or `\r\n` against `\n`.
+	*/
+	eolOnly: boolean;
+};
+/**
+* A run of rows in a plugin-composed buffer that carry code, for the
+* host's highlighter (`setSyntaxRegions`).
+*
+* A composed buffer — a diff stream, a log — is not a document any
+* grammar can parse, so the plugin says where the code is instead. A
+* region is a byte range of whole rows; every row in it is handed to the
+* language's parser with its first `prefix` bytes skipped (a gutter, a
+* diff marker), and rows outside every region keep whatever the plugin
+* styled them with and never advance a parser.
+*
+* `streams` name the parsers a row feeds, and regions that share a
+* stream id continue one parse across the rows between them: the old
+* and new side of a hunk interleave, and a comment box can sit inside a
+* hunk, yet each side is still read as the contiguous text it is. A row
+* both sides share (context) lists both. An empty list means one parser
+* shared by every region that says nothing.
+*
+* The contract:
+* - Only a plugin-composed (virtual) buffer can be told this; a file has
+*   a grammar of its own, and the call is ignored, with a log line, for
+*   anything else.
+* - A region starts at a row's first byte and ends just past a row's
+*   newline. A row is coloured when its first byte lies in a region.
+* - Regions replace the buffer's previous set and must not overlap: a
+*   region that overlaps the one before it (in byte order) is dropped,
+*   with a log line. Setting the buffer's content clears them all.
+* - The first stream a region names colours its rows; the others are fed
+*   for their state. The host keeps the four most recently fed parsers;
+*   a stream fed again after four others starts afresh.
+* - A language nothing in the grammar set claims leaves the rows as the
+*   plugin styled them, with a log line.
+* - Regions follow the text: an edit inside the buffer moves them the
+*   way it moves overlays.
+*/
+type TsSyntaxRegion = {
+	/**
+	* Byte offset of the first row's first byte.
+	*/
+	start: number;
+	/**
+	* Byte offset one past the last row's newline.
+	*/
+	end: number;
+	/**
+	* What the rows are written in: a path (`src/main.rs`, `Makefile`)
+	* or a language token (`py`, `rust`). Nothing is opened or read;
+	* it only selects the grammar.
+	*/
+	language: string;
+	/**
+	* Bytes at the start of every row that are not code.
+	*/
+	prefix: number;
+	/**
+	* Parsers the rows feed, in order; the first colours the rows. Empty
+	* means the shared stream `0`. See the type docs.
+	*/
+	streams: Array<number>;
+};
+/**
+* Options for creating a composite buffer (used by plugin API)
+*/
 type TsCreateCompositeBufferOptions = {
 	/**
 	* Buffer name (displayed in tabs/title)
@@ -251,13 +400,16 @@ type TsCreateCompositeBufferOptions = {
 	*/
 	initialFocusHunk?: number;
 };
+/**
+* Information about the viewport
+*/
 type ViewportInfo = {
 	/**
 	* Byte position of the first visible line
 	*/
 	topByte: number;
 	/**
-	* Line number of the first visible line (None when line index unavailable, e.g. large file before scan)
+	* Line number of the first visible line (`null` when the line index is unavailable, e.g. a large file before its scan)
 	*/
 	topLine: number | null;
 	/**
@@ -265,18 +417,31 @@ type ViewportInfo = {
 	*/
 	leftColumn: number;
 	/**
-	* Viewport width
+	* Viewport width in columns
 	*/
 	width: number;
 	/**
-	* Viewport height
+	* Viewport height in rows
 	*/
 	height: number;
 };
+/**
+* Total terminal size in cells. Returned by `editor.getScreenSize()`.
+*/
 type ScreenSize = {
 	width: number;
 	height: number;
 };
+/**
+* Payload delivered to a plugin's `editor.getNextKey()` Promise when
+* the next keypress arrives in the editor's input dispatch.
+*
+* `key` uses the same naming as `defineMode` bindings: lowercase
+* names like `"escape"`, `"enter"`, `"tab"`, `"space"`, `"left"`,
+* `"f1"`–`"f12"`, or a single character (e.g. `"a"`, `"!"`).
+* Modifier flags are reported separately so plugins can recognise
+* chord variants without parsing.
+*/
 type KeyEventPayload = {
 	/**
 	* Key name (e.g. `"a"`, `"escape"`, `"f1"`).
@@ -300,6 +465,13 @@ type KeyEventPayload = {
 	*/
 	meta: boolean;
 };
+/**
+* Per-split state surfaced to plugins via `editor.listSplits()`.
+*
+* Plugins that need to operate on every visible buffer (multi-split
+* flash labels, syncing decorations across panes, ...) can iterate
+* this list rather than only seeing the active split's `getViewport()`.
+*/
 type SplitSnapshot = {
 	/**
 	* Stable split identifier; matches the values used by
@@ -343,6 +515,11 @@ type SplitSnapshot = {
 	*/
 	viewport: ViewportInfo;
 };
+/**
+* What `editor.splitWindow()` resolves to: the new pane, already
+* laid out, so a caller can confirm where it landed without a
+* follow-up `listSplits()`.
+*/
 type SplitCreated = {
 	/**
 	* The new pane's id — pass to `openFileInSplit`, `focusSplit`, ...
@@ -364,6 +541,9 @@ type SplitCreated = {
 	width: number;
 	height: number;
 };
+/**
+* Options for `editor.splitWindow()`.
+*/
 type SplitWindowOptions = {
 	/**
 	* Divider orientation. Default `"vertical"` — panes side by side.
@@ -391,8 +571,26 @@ type SplitWindowOptions = {
 	*/
 	keepFocus?: boolean;
 };
+/**
+* Which way the divider runs when splitting a pane.
+*
+* Named for the *divider*, not the stacking, which is the convention
+* vim and tmux use and the opposite of what "horizontal layout" suggests
+* in some editors — so the two cases are spelled out on each variant.
+*/
 type SplitAxis = "vertical" | "horizontal";
+/**
+* Where a new pane goes relative to the one being split.
+*
+* With `direction: "vertical"` (a vertical divider, panes side by side),
+* `Before` puts the new pane on the **left** and `After` on the right.
+* With `direction: "horizontal"`, `Before` is **above** and `After` below.
+*/
 type SplitPlacement = "before" | "after";
+/**
+* One clickable line in a buffer: press Enter on it, or click it, and the
+* editor opens what it points at.
+*/
 type LineTarget = {
 	/**
 	* Row in the source buffer, 0-indexed, that carries this target.
@@ -414,6 +612,10 @@ type LineTarget = {
 	*/
 	into?: string;
 };
+/**
+* One pane, as `describeWorkspace()` reports it: what is in it, where it
+* is, and the ids needed to act on it.
+*/
 type PaneDescription = {
 	/**
 	* Pass to `openFileInSplit`, `focusSplit`, `setSplitRatio`, ...
@@ -434,7 +636,7 @@ type PaneDescription = {
 	*/
 	label: string | null;
 	/**
-	* Absolute path when this pane shows a file, else `None`.
+	* Absolute path when this pane shows a file, else `null`.
 	*/
 	path: string | null;
 	/**
@@ -459,6 +661,10 @@ type PaneDescription = {
 	width: number;
 	height: number;
 };
+/**
+* The answer to "what does the editor look like right now" — the call an
+* agent makes before deciding what to change.
+*/
 type WorkspaceDescription = {
 	/**
 	* Working directory of the active window.
@@ -487,6 +693,9 @@ type WorkspaceDescription = {
 	*/
 	activeSplitId: number;
 };
+/**
+* Layout hints supplied by plugins (e.g., Compose mode)
+*/
 type LayoutHints = {
 	/**
 	* Optional compose width for centering/wrapping
@@ -497,9 +706,12 @@ type LayoutHints = {
 	*/
 	columnGuides?: Array<number>;
 };
+/**
+* Wire-format view token with optional source mapping and styling
+*/
 type ViewTokenWire = {
 	/**
-	* Source byte offset in the buffer. None for injected content (annotations).
+	* Source byte offset in the buffer. `null` for injected content (annotations).
 	*/
 	source_offset: number | null;
 	/**
@@ -507,25 +719,46 @@ type ViewTokenWire = {
 	*/
 	kind: ViewTokenWireKind;
 	/**
-	* Optional styling for injected content (only used when source_offset is None)
+	* Optional styling for injected content (only used when `source_offset` is `null`)
 	*/
 	style?: ViewTokenStyle;
 };
+/**
+* Wire-format view token kind (serialized for plugin transforms)
+*/
 type ViewTokenWireKind = {
 	"Text": string;
 } | "Newline" | "Space" | "Break" | {
 	"BinaryByte": number;
 };
+/**
+* Color carried by a `ViewTokenStyle`. Untagged so JSON plugins can
+* keep passing `[r, g, b]` arrays, while richer themes can use named
+* ANSI colors (`"Red"`, `"LightGreen"`, `"Default"`) or theme keys
+* (`"editor.diff_remove_bg"`). The renderer resolves named/theme
+* strings against the active theme at draw time; unknown strings
+* fall through to the terminal's default color.
+*
+* A 256-color palette value is written as `"Indexed:N"` (N from 0 to
+* 255).
+*/
 type TokenColor = [number, number, number] | string;
+/**
+* Styling for view tokens (used for injected annotations)
+*
+* This allows plugins to specify styling for tokens that don't have a source
+* mapping (`source_offset: null`), such as annotation headers in git blame.
+* For tokens with a `source_offset`, syntax highlighting is applied instead.
+*/
 type ViewTokenStyle = {
 	/**
 	* Foreground color. Either `[r, g, b]` or a named/theme string —
-	* see [`TokenColor`].
+	* see `TokenColor`.
 	*/
 	fg: TokenColor | null;
 	/**
 	* Background color. Either `[r, g, b]` or a named/theme string —
-	* see [`TokenColor`].
+	* see `TokenColor`.
 	*/
 	bg: TokenColor | null;
 	/**
@@ -541,17 +774,31 @@ type ViewTokenStyle = {
 	*/
 	underline: boolean;
 };
+/**
+* A single suggestion item for autocomplete
+*/
 type PromptSuggestion = {
+	/**
+	* What this row is, unique within the list: the plugin's own name for
+	* the item (a path, a match's `file:line:col`, a record id).
+	*
+	* **Required.** The list keys its rows by it, so an insertion or a
+	* re-rank moves the other rows instead of rewriting them, and the
+	* selection stays on the row it was on. Not the label: two rows may
+	* read the same and still be different things. `setPromptSuggestions`
+	* throws when two suggestions share an id.
+	*/
+	id: string;
 	/**
 	* The text to display
 	*/
 	text: string;
 	/**
-	* Optional description
+	* Optional description, shown in the row alongside `text`
 	*/
 	description?: string;
 	/**
-	* The value to use when selected (defaults to text if None)
+	* The value to use when selected (defaults to `text` when omitted)
 	*/
 	value?: string;
 	/**
@@ -566,13 +813,17 @@ type PromptSuggestion = {
 	*/
 	description_spans?: Array<StyledText>;
 	/**
-	* Optional keyboard shortcut
+	* Optional keyboard shortcut, shown in the row as a hint
 	*/
 	keybinding?: string;
 };
+/**
+* Directory entry returned by readDir
+*/
 type DirEntry = {
 	/**
-	* File/directory name
+	* File/directory name only, not the full path: join it with the
+	* directory that was read to get the entry's path
 	*/
 	name: string;
 	/**
@@ -580,15 +831,26 @@ type DirEntry = {
 	*/
 	is_file: boolean;
 	/**
-	* True if this is a directory
+	* True if this is a directory. A symlink reports the type of its
+	* target, so a link to a directory is a directory here
 	*/
 	is_dir: boolean;
 };
+/**
+* Information about a buffer
+*/
 type BufferInfo = {
 	/**
 	* Buffer ID
 	*/
 	id: number;
+	/**
+	* The window this buffer belongs to. A buffer lives in exactly one
+	* window — the same file open in two windows is two buffers with two
+	* ids — so a plugin that keeps a buffer id keeps this with it, and
+	* checks it against the window it is acting in.
+	*/
+	window_id: number;
 	/**
 	* File path (if any)
 	*/
@@ -606,7 +868,7 @@ type BufferInfo = {
 	*/
 	name: string;
 	/**
-	* Whether the buffer has been modified
+	* Whether the buffer has unsaved changes
 	*/
 	modified: boolean;
 	/**
@@ -614,7 +876,7 @@ type BufferInfo = {
 	*/
 	length: number;
 	/**
-	* Number of lines, when the buffer has been indexed. `None` for a very
+	* Number of lines, when the buffer has been indexed. `null` for a very
 	* large file whose line index hasn't been built yet — the one case
 	* where the count genuinely isn't known.
 	*
@@ -658,6 +920,18 @@ type BufferInfo = {
 	*/
 	language: string;
 	/**
+	* Columns per indentation level for this buffer: `editor.tab_size`,
+	* overridden by `languages.<language>.tab_size`, `.editorconfig`, or a
+	* per-buffer "Set Tab Size". A plugin that inserts indentation itself
+	* should use this rather than a fixed width.
+	*/
+	tab_size: number;
+	/**
+	* Whether indentation in this buffer is a tab character rather than
+	* `tab_size` spaces, resolved the same way as `tab_size`.
+	*/
+	use_tabs: boolean;
+	/**
 	* Whether this tab was opened in "preview" (ephemeral) mode — true when
 	* opened via single-click in the file explorer and not yet committed
 	* (no edit, no double-click, no tab-click, no layout change). Plugins
@@ -676,6 +950,10 @@ type BufferInfo = {
 	*/
 	splits: number[];
 };
+/**
+* Information about an editor session (plugin-visible). Returned
+* by `editor.listWindows()` and carried in the snapshot.
+*/
 type WindowInfo = {
 	/**
 	* Stable session id. The base session is always `1`.
@@ -703,13 +981,8 @@ type WindowInfo = {
 	* (or arbitrary directory) the user pointed the new-session
 	* form at. For sessions without an explicit project (legacy
 	* sessions, the launch session, sessions created outside the
-	* orchestrator's new-session form) this equals `root` — the
-	* host normalises at the API boundary so plugins never have
-	* to deal with `null`/`undefined`/`""` ambiguity (`??` only
-	* falls through on `null`, but the orchestrator's
-	* `WindowInfo` round-trips a `Some(PathBuf::new())` as `""`,
-	* which then becomes a poisoned lex sort key — observed as
-	* the Windows-only dock reorder).
+	* orchestrator's new-session form) this equals `root`, so it
+	* is never empty, `null` or `undefined`.
 	*/
 	project_path: string;
 	/**
@@ -725,11 +998,15 @@ type WindowInfo = {
 	* host-local (SSH / Kubernetes). Carried for live remote windows
 	* *and* for dormant (not-yet-connected / disconnected) sessions, so
 	* the dock can badge a restored SSH session before any connection
-	* exists. `None` for local sessions and plugin-managed backends
+	* exists. Omitted for local sessions and plugin-managed backends
 	* (devcontainer), whose facet the owning plugin supplies itself.
 	*/
 	remote?: RemoteBackendInfo | null;
 };
+/**
+* Backend identity of a non-local session, as surfaced to plugins on
+* `WindowInfo.remote`, reduced to what the dock renders.
+*/
 type RemoteBackendInfo = {
 	/**
 	* Backend kind: `"ssh"` or `"kubernetes"`.
@@ -747,6 +1024,9 @@ type RemoteBackendInfo = {
 	*/
 	connected: boolean;
 };
+/**
+* Diagnostic from LSP
+*/
 type JsDiagnostic = {
 	/**
 	* Document URI
@@ -769,6 +1049,9 @@ type JsDiagnostic = {
 	*/
 	source?: string;
 };
+/**
+* Range in a document (start and end positions)
+*/
 type JsRange = {
 	/**
 	* Start position
@@ -779,6 +1062,9 @@ type JsRange = {
 	*/
 	end: JsPosition;
 };
+/**
+* Position in a document (line and character)
+*/
 type JsPosition = {
 	/**
 	* Zero-indexed line number
@@ -789,6 +1075,9 @@ type JsPosition = {
 	*/
 	character: number;
 };
+/**
+* Specification for an action to execute, with optional repeat count
+*/
 type ActionSpec = {
 	/**
 	* Action name (e.g., "move_word_right", "delete_line")
@@ -806,8 +1095,11 @@ type ActionSpec = {
 	* macro — which contains `InsertChar` and other payload actions —
 	* round-trip losslessly through `executeActions`.
 	*/
-	args: Record<string, unknown>;
+	args?: Record<string, unknown>;
 };
+/**
+* Action button for action popups
+*/
 type TsActionPopupAction = {
 	/**
 	* Unique action identifier (returned in ActionPopupResult)
@@ -818,6 +1110,9 @@ type TsActionPopupAction = {
 	*/
 	label: string;
 };
+/**
+* Options for showActionPopup
+*/
 type ActionPopupOptions = {
 	/**
 	* Unique identifier for the popup (used in ActionPopupResult)
@@ -843,6 +1138,17 @@ type ActionPopupOptions = {
 	*/
 	buffer_id?: number;
 };
+/**
+* Options for `editor.addMenuItem` — one plugin-contributed row in an
+* existing menu bar menu.
+*
+* Every string here is matched or displayed by the host, so the plugin
+* never reaches into menu internals: it names the *target* menu and,
+* optionally, the neighbour to sit next to. Both lookups accept a stable
+* identifier (a menu `id` like `"View"`, an item's `action` like
+* `"toggle_file_explorer"`) as well as a display label, so a plugin can
+* place its row without knowing the user's locale.
+*/
 type AddMenuItemOptions = {
 	/**
 	* Target menu, matched against each menu's stable `id` ("View",
@@ -881,6 +1187,10 @@ type AddMenuItemOptions = {
 	*/
 	before?: string;
 };
+/**
+* Plugin-contributed row in the LSP-Servers popup, passed to
+* `editor.setLspMenuContributions`.
+*/
 type TsLspMenuItem = {
 	/**
 	* Stable identifier used as the `action_id` in the resulting
@@ -892,13 +1202,19 @@ type TsLspMenuItem = {
 	*/
 	label: string;
 };
+/**
+* Decoration metadata for a file explorer entry, provided by a plugin
+* through `setFileExplorerDecorations`.
+*/
 type FileExplorerDecoration = {
 	/**
-	* File path to decorate
+	* File path to decorate: absolute, or relative to the file explorer's
+	* root. Paths outside the root are ignored.
 	*/
 	path: string;
 	/**
-	* Symbol to display (e.g., "●", "M", "A")
+	* Symbol to display (e.g., "●", "M", "A"). Only its first character is
+	* shown, so use a single character.
 	*/
 	symbol: string;
 	/**
@@ -910,6 +1226,12 @@ type FileExplorerDecoration = {
 	*/
 	priority: number;
 };
+/**
+* Additive slot override for a file explorer entry.
+*
+* Any field left `null` falls back to the editor's compatibility providers,
+* so plugins can override just the piece they care about.
+*/
 type FileExplorerSlotEntry = {
 	/**
 	* File or directory path to override.
@@ -944,6 +1266,9 @@ type FileExplorerSlotEntry = {
 	*/
 	priority: number;
 };
+/**
+* Leading-slot content for a file explorer row.
+*/
 type FileExplorerLeadingSlot = {
 	/**
 	* Text shown in the leading slot (for example, an icon glyph).
@@ -958,6 +1283,9 @@ type FileExplorerLeadingSlot = {
 	*/
 	minWidth: number;
 };
+/**
+* Trailing-slot content for a file explorer row.
+*/
 type FileExplorerTrailingSlot = {
 	/**
 	* Text shown in the trailing slot (for example, a badge glyph).
@@ -972,6 +1300,9 @@ type FileExplorerTrailingSlot = {
 	*/
 	tooltip: FileExplorerTooltip | null;
 };
+/**
+* Tooltip content shown when hovering a trailing file-explorer slot.
+*/
 type FileExplorerTooltip = {
 	/**
 	* Tooltip title shown in the popup border.
@@ -982,6 +1313,9 @@ type FileExplorerTooltip = {
 	*/
 	lines: Array<string>;
 };
+/**
+* Formatter configuration for language packs
+*/
 type FormatterPackConfig = {
 	/**
 	* Command to run (e.g., "prettier", "rustfmt")
@@ -992,6 +1326,9 @@ type FormatterPackConfig = {
 	*/
 	args: Array<string>;
 };
+/**
+* Process resource limits for LSP servers
+*/
 type ProcessLimitsPackConfig = {
 	/**
 	* Maximum memory usage as percentage of total system memory (null = no limit)
@@ -1006,6 +1343,9 @@ type ProcessLimitsPackConfig = {
 	*/
 	enabled: boolean | null;
 };
+/**
+* Result of creating a terminal, returned by `createTerminal`
+*/
 type TerminalResult = {
 	/**
 	* The created buffer ID (for use with setSplitBuffer, etc.)
@@ -1020,6 +1360,38 @@ type TerminalResult = {
 	*/
 	splitId: number | null;
 };
+/**
+* A terminal's visible screen, returned by `getTerminalScreens`
+*/
+type TerminalScreen = {
+	/**
+	* The terminal's buffer (for `showBuffer`, `getBufferInfo`)
+	*/
+	bufferId: number;
+	/**
+	* The screen's lines, top to bottom, as plain text: rows a wrap
+	* continues are joined into one
+	*/
+	lines: Array<string>;
+	/**
+	* The terminal's backing file (in `getTerminalDir()`), or "" when it
+	* has none. A checkpoint leaves the screen there too, after the
+	* scrollback, until the next one replaces it.
+	*/
+	file: string;
+	/**
+	* The terminal's tab label (e.g. `claude`, `Terminal 1`)
+	*/
+	name: string;
+};
+/**
+* Options for `createWindowWithTerminal` — the atomic
+* "spawn a new editor session that hosts an agent terminal"
+* entry point used by Orchestrator. Bundles window creation,
+* dive, and terminal spawn so the new window is born with the
+* terminal as its seed buffer (no transient `[No Name]` tab,
+* no race between create-window and create-terminal completing).
+*/
 type CreateWindowWithTerminalOptions = {
 	/**
 	* Absolute path to the new session's worktree / project
@@ -1038,8 +1410,8 @@ type CreateWindowWithTerminalOptions = {
 	*/
 	cwd?: string;
 	/**
-	* Argv to spawn directly inside the PTY. `None` keeps the
-	* shell-and-type behaviour; `Some([cmd, ...args])` runs the
+	* Argv to spawn directly inside the PTY. Omit it to keep the
+	* shell-and-type behaviour; set to `[cmd, ...args]`, it runs the
 	* command as the PTY child (used by Orchestrator so the
 	* agent process is the PTY's direct child).
 	*/
@@ -1056,7 +1428,7 @@ type CreateWindowWithTerminalOptions = {
 	* `claude --session-id <id>` sets `resume` to
 	* `["claude", "--resume", "<id>"]` (or `["claude", "--continue"]`),
 	* so a restored session rejoins its conversation rather than starting
-	* a fresh agent. `None` keeps `command` as the restore command. The id
+	* a fresh agent. Omit it to keep `command` as the restore command. The id
 	* is a plain argv element — never interpolated into a shell string.
 	*/
 	resume?: Array<string>;
@@ -1065,7 +1437,7 @@ type CreateWindowWithTerminalOptions = {
 	* terminal's child process, on top of the inherited/activated
 	* env. Applied after the editor's control vars (`TERM`,
 	* `FRESH_SESSION`), so a plugin's entry wins over those only
-	* when it names the same key. `None` (the default) adds
+	* when it names the same key. Omitted (the default), it adds
 	* nothing — old callers behave exactly as before.
 	*/
 	env?: { [key in string] : string };
@@ -1096,6 +1468,10 @@ type CreateWindowWithTerminalOptions = {
 	*/
 	adoptWindow?: number;
 };
+/**
+* Result of `createWindowWithTerminal` — the ids of the new
+* window plus the terminal seeded into its split layout.
+*/
 type SessionWithTerminalResult = {
 	/**
 	* The new window's id — a per-process handle, valid until this editor
@@ -1115,6 +1491,11 @@ type SessionWithTerminalResult = {
 	*/
 	bufferId: number;
 };
+/**
+* Options for `createPreparingWindow` — a workspace opened before its
+* contents exist, so the user lands in it immediately instead of waiting
+* on the work that fills it.
+*/
 type CreatePreparingWindowOptions = {
 	/**
 	* Absolute path the placeholder window roots at. It must exist — use
@@ -1137,6 +1518,10 @@ type CreatePreparingWindowOptions = {
 	*/
 	activate?: boolean;
 };
+/**
+* Result of `createPreparingWindow` — the ids of the placeholder window,
+* which are already final: adopting it later keeps both.
+*/
 type PreparingWindowResult = {
 	/**
 	* The new window's id — a per-process handle, valid until this editor
@@ -1147,7 +1532,19 @@ type PreparingWindowResult = {
 	* The new workspace's durable identity (`ws-…`), stable across restarts.
 	*/
 	stableId: string;
+	/**
+	* The placeholder's seed buffer. Mount a widget panel here
+	* (`mountWidgetPanel`) to describe the page yourself: the plugin
+	* building the workspace knows what it is waiting on, what failed and
+	* what the user can do about it, so the page is its to write. The
+	* editor's own page — name, state, one line of explanation — is only
+	* the fallback for a window nothing has described.
+	*/
+	bufferId: number;
 };
+/**
+* Options for createTerminal
+*/
 type CreateTerminalOptions = {
 	/**
 	* Working directory for the terminal (defaults to editor cwd)
@@ -1190,9 +1587,9 @@ type CreateTerminalOptions = {
 	windowId?: WindowId;
 	/**
 	* Argv to spawn directly inside the PTY instead of the host's
-	* configured shell. `None` (default) keeps the historical
+	* configured shell. Omit it (the default) to keep the historical
 	* behaviour: spawn the user's shell and let the caller type into
-	* it via `sendTerminalInput`. `Some([cmd, ...args])` runs that
+	* it via `sendTerminalInput`. Set to `[cmd, ...args]`, it runs that
 	* exact command as the PTY child — no shell middleman, so the
 	* process exits cleanly when the agent does and the
 	* terminal-buffer's `terminal_exit` plugin hook reflects the
@@ -1206,24 +1603,24 @@ type CreateTerminalOptions = {
 	* (when `command` is set) or `"Terminal N"` (the historical
 	* auto-numbered title). If another terminal in the same window
 	* already uses the requested title, the host appends `" (k)"`
-	* to disambiguate. Empty string is treated the same as `None`.
+	* to disambiguate. An empty string is treated the same as omitting it.
 	*/
 	title?: string;
 	/**
 	* Extra environment variables to set in the spawned terminal's
 	* child process, on top of the inherited/activated env. Mirrors
-	* `CreateWindowWithTerminalOptions::env`. `None` (the default)
+	* `CreateWindowWithTerminalOptions.env`. Omitted (the default), it
 	* adds nothing, so existing callers behave exactly as before.
 	*/
 	env?: { [key in string] : string };
 	/**
 	* Argv to run when this terminal is *restored* or *restarted*,
 	* instead of re-running `command`. The exact counterpart of
-	* `CreateWindowWithTerminalOptions::resume`, so an agent launched
+	* `CreateWindowWithTerminalOptions.resume`, so an agent launched
 	* into an existing window rejoins its conversation on restart the
 	* same way one born in its own window does — a session started with
 	* `claude --session-id <id>` sets `resume` to
-	* `["claude", "--resume", "<id>"]`. `None` keeps `command` as the
+	* `["claude", "--resume", "<id>"]`. Omit it to keep `command` as the
 	* restore argv. The id is a plain argv element — never interpolated
 	* into a shell string.
 	*
@@ -1249,6 +1646,10 @@ type CreateTerminalOptions = {
 	*/
 	allowScript?: boolean;
 };
+/**
+* Information about a cursor in the editor: its position, its line, and
+* its selection if it has one
+*/
 type CursorInfo = {
 	/**
 	* Byte position of the cursor
@@ -1269,6 +1670,12 @@ type CursorInfo = {
 	*/
 	line: number | null;
 };
+/**
+* Options for adding an overlay with theme support.
+*
+* This struct provides a type-safe way to specify overlay styling
+* with optional theme key references for colors.
+*/
 type OverlayOptions = {
 	/**
 	* Foreground color - RGB array or theme key string
@@ -1318,7 +1725,22 @@ type OverlayOptions = {
 	*/
 	url?: string | null;
 };
+/**
+* Color specification that can be either RGB values or a theme key.
+*
+* Theme keys reference colors from the current theme, e.g.:
+* - "ui.status_bar_bg" - UI status bar background
+* - "editor.selection_bg" - Editor selection background
+* - "syntax.keyword" - Syntax highlighting for keywords
+* - "diagnostic.error" - Error diagnostic color
+*
+* When a theme key is used, the color is resolved at render time,
+* so overlays automatically update when the theme changes.
+*/
 type OverlayColorSpec = [number, number, number] | string;
+/**
+* An inline overlay specifying styling for a sub-range within a text entry
+*/
 type InlineOverlay = {
 	/**
 	* Start offset within the entry's text. See `unit`.
@@ -1341,7 +1763,27 @@ type InlineOverlay = {
 	*/
 	unit?: OffsetUnit;
 };
+/**
+* Unit for `InlineOverlay` `start` / `end` offsets.
+*
+* Plugins emitting overlays for text whose byte/codepoint counts
+* match (pure ASCII) can stay on the `Byte` default and avoid
+* per-overlay UTF-8 arithmetic. Plugins working with text that
+* may contain multi-byte characters can emit offsets in `Char`
+* units and let the host convert them to byte offsets at
+* consumption time — which is free in Rust against the entry's
+* final text.
+*/
 type OffsetUnit = "byte" | "char";
+/**
+* One styled segment of a `TextPropertyEntry` built via the
+* `segments` field. Plugins use segments to describe row content
+* structurally — a sequence of (text, optional style, optional
+* nested overlays) — instead of pre-rendering the text and
+* computing byte/char offsets for overlays themselves. The host
+* concatenates segment text and emits the corresponding overlays
+* during `normalize_widths`.
+*/
 type StyledSegment = {
 	/**
 	* Verbatim text for this segment.
@@ -1360,6 +1802,9 @@ type StyledSegment = {
 	*/
 	overlays?: Array<InlineOverlay>;
 };
+/**
+* Grammar info exposed to plugins, mirroring the editor's grammar provenance tracking.
+*/
 type GrammarInfoSnapshot = {
 	/**
 	* The grammar name as used in config files (case-insensitive matching)
@@ -1378,19 +1823,36 @@ type GrammarInfoSnapshot = {
 	*/
 	short_name: string | null;
 };
+/**
+* A rectangular region, in cells. Used by the animation plugin API so
+* callers can target arbitrary screen regions without going through a
+* virtual buffer.
+*/
 type AnimationRect = {
 	x: number;
 	y: number;
 	width: number;
 	height: number;
 };
+/**
+* Edge a slide-in effect enters from.
+*/
 type PluginAnimationEdge = "top" | "bottom" | "left" | "right";
+/**
+* Plugin-facing animation description. Tagged by `kind`. Additional
+* variants can be added later; plugins must handle the `kind` they send.
+*/
 type PluginAnimationKind = {
 	"kind": "slideIn";
 	from: PluginAnimationEdge;
 	durationMs: number;
 	delayMs: number;
 };
+/**
+* One entry in a `HintBar` — a key chord plus its label.
+* Renders as `<keys> <label>` with the key portion styled by the
+* `ui.help_key_fg` theme key.
+*/
 type HintEntry = {
 	/**
 	* The key chord, e.g. `"Tab"`, `"Alt+P"`, `"Esc"`.
@@ -1401,7 +1863,31 @@ type HintEntry = {
 	*/
 	label: string;
 };
+/**
+* Visual role for a `Button`. Maps to theme keys at render time —
+* plugins describe intent, not colors. See §7 of the design doc.
+*/
 type ButtonKind = "normal" | "primary" | "danger";
+/**
+* Which way a form control's label sits in its `label_width` column.
+*
+* A panel-wide property, set at mount (`MountFloatingWidget.label_align`)
+* and read by every `Text` / `Dropdown` / `Toggle` / `Number` / `Radio`
+* that pads its label to a column — alignment only means something relative to
+* the siblings sharing that column, so it is not a per-control field.
+* `Left` is what every panel rendered before the option existed.
+*/
+type LabelAlign = "left" | "right";
+/**
+* How text that does not fit the width layout gave it gives up the cells.
+*
+* **The cut is the run's to mark, for the same reason the width is the
+* box's**: only measurement knows whether the text fit, so a plugin that
+* appended its own ellipsis had to be told a width first — which is the
+* duplication this removes. Mirrors `fresh_ui::desc::Elide`; ignored by
+* wrapping text, which has no overflow to mark.
+*/
+type Elide = "none" | "tail" | "head";
 type TreeNode = {
 	/**
 	* The pre-rendered row content (text + per-row overlays).
@@ -1422,12 +1908,33 @@ type TreeNode = {
 	*/
 	hasChildren: boolean;
 	/**
+	* A leaf drawn with no disclosure gutter: its text starts at its
+	* indent, not two columns in. For rows that stand at a tree's top level
+	* beside folders and should read as flush with the panel's edge (the
+	* orchestrator dock's unfiled workspaces). Ignored on a node with
+	* children, whose ▶/▼ is the gutter.
+	*/
+	flush?: boolean;
+	/**
+	* The row can be picked up with the pointer and dropped on another row
+	* of the same tree. The plugin hears, as `widget_event`s on the tree:
+	* `drag` (`{ key, target }`: the row lifted and the row under the
+	* pointer, `null` off every row) each time that changes — once per
+	* pointer event, so a release can land on a row the plugin was not yet
+	* told about — from the first row the drag leaves its own for; `drop` (`{ key, target, index }`)
+	* when it is released on another row; and `dragend` (`{ key }`) when
+	* the drag is over, dropped or not. A plain click hears none of them. A
+	* press on the row activates on release, not on the press, so a drag
+	* does not first act on the row it lifts.
+	*/
+	draggable?: boolean;
+	/**
 	* Per-node checkbox state. Only rendered when the parent
-	* `Tree` has `checkable: true`. `None` = no checkbox glyph;
-	* `Some(true)` = `[v]`; `Some(false)` = `[ ]`. The plugin
+	* `Tree` has `checkable: true`. Omitted = no checkbox glyph;
+	* `true` = `[v]`; `false` = `[ ]`. The plugin
 	* owns the truth — the host fires `widget_event { event_type:
 	* "toggle" }` and the plugin pushes the new state back via
-	* `WidgetMutation::SetCheckedKeys`.
+	* `editor.widgetMutate(panel, { kind: "setCheckedKeys", ... })`.
 	*/
 	checked?: boolean | null;
 	/**
@@ -1440,7 +1947,82 @@ type TreeNode = {
 	* Ignored when `item_height == 1`.
 	*/
 	extraLines?: Array<TextPropertyEntry>;
+	/**
+	* The span of `text` this row exists to show, in **chars**.
+	*
+	* A row wider than the panel is windowed by the host, and without this
+	* the window can only start at the head of the line — which is exactly
+	* where a search result's match usually is not (issue #1580). Naming the
+	* span lets the host rest the window on it instead, and the reader pans
+	* away from there.
+	*
+	* Chars rather than columns because that is the unit a plugin can count:
+	* it has the string, not the terminal's width table. The host converts.
+	* Out-of-range values are harmless — they resolve to the end of the text.
+	*/
+	windowAnchor?: TextWindowAnchor | null;
+	/**
+	* A button drawn at the row's tail: what this row is *for*, said on
+	* the row itself rather than only in a footer the eye has to travel
+	* to. When set to `label`, it renders `[ label ]` against the panel's right
+	* edge and emits a hit area over it that fires the `action` event
+	* with the row's `index` and `key`; the keyboard reaches the same
+	* thing through the tree's `activate`.
+	*
+	* The button is pinned like the indent is pinned: it sits outside the
+	* window the body is fitted into, so a row too wide for the panel
+	* slides *under* its button rather than pushing it off the edge.
+	* Ignored on a bordered card (`card_borders` with `item_height > 1`),
+	* whose chrome has nowhere to put one.
+	*/
+	action?: string | null;
+	/**
+	* **A table row.** When the parent `Tree` declares `columns`, a node
+	* that carries cells is drawn from them — one per column, each fitted
+	* to its column at the width layout gives the tree and elided at the
+	* end its column says — instead of from `text`. A node with no cells
+	* (a group heading) is drawn from `text` across the whole row.
+	*/
+	cells?: Array<TableCell>;
 };
+/**
+* How a row asks to be windowed when it is wider than the panel.
+* See `TreeNode.windowAnchor`.
+*/
+type TextWindowAnchor = {
+	/**
+	* Chars at the head of the row that never move.
+	*
+	* A row's leading pieces are usually its *identity* rather than its
+	* content — a search result's `path:line` — and a window that slid them
+	* away left rows that could not be told apart. They stay put and the
+	* rest of the row slides under them, the same relationship the indent
+	* and checkbox glyphs already have with the body.
+	*/
+	pinned: number;
+	/**
+	* Char index, in the whole row, where the span the row exists to show
+	* starts. Must be at or after `pinned`; a span inside the pinned head is
+	* always visible anyway.
+	*/
+	start: number;
+	/**
+	* Length of the span, in chars. Zero is allowed and means a point.
+	*/
+	len: number;
+};
+/**
+* Declarative widget tree. Each variant is one node; nested
+* composition is via `Row { children }` / `Col { children }`.
+*
+* `key` is the stable identifier used by the reconciler to match a
+* node across `MountWidgetPanel` / `UpdateWidgetPanel` calls — when
+* the plugin re-emits a Spec, instance state (cursor offset, scroll,
+* expanded keys, hover) is preserved on nodes whose `key` matches.
+* Plugins should provide stable keys for any widget that owns
+* instance state; stateless widgets (`HintBar`, `Toggle`, `Button`,
+* `Spacer`) can omit it.
+*/
 type WidgetSpec = {
 	"kind": "row";
 	children: Array<WidgetSpec>;
@@ -1454,6 +2036,17 @@ type WidgetSpec = {
 	* Ignored when the row contains multi-line (block) children.
 	*/
 	wrap: boolean;
+	/**
+	* Settle a wrapping row's lines against its right edge: buttons
+	* flush right while they fit, wrapping from the left when they do
+	* not. Read only when `wrap` is set.
+	*
+	* The point is that the plugin does not have to know which of those
+	* two layouts it is getting — the host lays the row out at a width
+	* the plugin cannot see, and a guess made here is a guess about a
+	* frame that has not happened yet.
+	*/
+	justifyEnd: boolean;
 } | {
 	"kind": "col";
 	children: Array<WidgetSpec>;
@@ -1482,11 +2075,27 @@ type WidgetSpec = {
 	*/
 	labelFirst: boolean;
 	/**
-	* Pad the label to this display width in `label_first`
-	* layout so a column of controls aligns their chips. `0` =
-	* no padding. Defaults to `0`.
+	* The label column a form's controls share, in display cells.
+	* `0` = no column alignment. Defaults to `0`.
+	*
+	* **It means something in both layouts, and not the same thing.**
+	* With `label_first`, it pads this toggle's own label so its chip
+	* lines up with its siblings' value cells. Chip-first, the toggle
+	* has no label in that column at all, so it indents the *chip*
+	* there instead — which is how `[v] Remember this machine` sits
+	* under the fields above it rather than at the panel's edge. A
+	* chip-first toggle in a panel that sets a `label_width` therefore
+	* moves right by that much plus the `: ` its siblings spend;
+	* before this field was read on that path it stayed flush left.
 	*/
 	labelWidth: number;
+	/**
+	* The keyboard accelerator's letter, underlined where it first
+	* appears in `label` (case-insensitively) — the classic menu-bar
+	* mnemonic, so `Alt+L` reads as the `l` in `Files`. Absent, or a
+	* letter the label does not contain, underlines nothing.
+	*/
+	mnemonic?: string | null;
 	key?: string | null;
 } | {
 	"kind": "number";
@@ -1509,7 +2118,7 @@ type WidgetSpec = {
 	step: number;
 	/**
 	* Render the value as an integer (no decimal point). The
-	* value is still carried as `f64`; only the display is
+	* value itself is not rounded; only the display is
 	* truncated. Defaults to `false`.
 	*/
 	integer: boolean;
@@ -1535,23 +2144,6 @@ type WidgetSpec = {
 	* controls aligns their value cells. `0` = no padding.
 	*/
 	labelWidth: number;
-	/**
-	* In-place edit buffer. `Some` = the value is being edited:
-	* the cell renders this text (with caret / selection) instead
-	* of the formatted value. `None` = display mode.
-	*/
-	editText?: string | null;
-	/**
-	* Byte offset of the edit caret within `edit_text`. `-1` =
-	* no caret (ignored unless `edit_text` is `Some`).
-	*/
-	editCursor: number;
-	/**
-	* Selection byte range within `edit_text` (`start`, `end`).
-	* `-1` for either end = no selection.
-	*/
-	editSelStart: number;
-	editSelEnd: number;
 	key?: string | null;
 } | {
 	"kind": "dropdown";
@@ -1591,6 +2183,33 @@ type WidgetSpec = {
 	* taller than its window. Defaults to `0`.
 	*/
 	scrollOffset: number;
+	key?: string | null;
+} | {
+	"kind": "radio";
+	/**
+	* The selectable options, in display order.
+	*/
+	options: Array<string>;
+	/**
+	* Initial selected index into `options`. Read at first render
+	* only; instance state takes over thereafter. Clamped to
+	* `[0, options.len())`.
+	*/
+	selectedIndex: number;
+	/**
+	* Optional label rendered before the options. Empty = omitted.
+	*/
+	label?: string;
+	/**
+	* Whether this widget has visual focus. Initial-only once the
+	* host owns focus.
+	*/
+	focused: boolean;
+	/**
+	* Pad the label to this display width so a column of controls
+	* aligns their option cells. `0` = no padding.
+	*/
+	labelWidth: number;
 	key?: string | null;
 } | {
 	"kind": "dualList";
@@ -1687,10 +2306,9 @@ type WidgetSpec = {
 	*/
 	bare: boolean;
 	/**
-	* Stretch the button across the full width it is laid out in
-	* (the panel's content width, or its share of an enclosing
-	* `Row`), padding the label with spaces — and truncating it
-	* with an `…` when the width can't hold it.
+	* Stretch the button across the full width it is laid out in:
+	* the panel's content width, its share of an enclosing `Row`,
+	* or the width an anchored popup settled on.
 	*
 	* This exists because focus / hover paint the button's *own*
 	* cells: a natural-width button leaves the rest of its row
@@ -1698,19 +2316,28 @@ type WidgetSpec = {
 	* row out (a `LabeledSection` pads every child to its inner
 	* width). Dropdown and context-menu entries are rows of a
 	* menu, not free-standing actions, so their highlight has to
-	* span the row — set this on them and the host fills the row
-	* at the width it actually rendered, with no plugin-side
-	* width guess to drift on a resize or a dock drag.
+	* span the row.
 	*
-	* Leave it off for a free-standing action, and off for
-	* anything inside an anchored popup that sizes itself to its
-	* content — filling there stretches the popup to the whole
-	* panel width.
+	* **It is a width, not a longer label.** The host sizes the
+	* button's box to its content and lets the enclosing column
+	* stretch it, so the label stays the label and how wide the
+	* row is stays layout's answer — including an answer nobody
+	* can predict, like a dock the user just dragged. It used to
+	* be spelled by padding the label with spaces out to a width
+	* the caller had to supply, which is why it once carried a
+	* warning against using it inside an anchored popup that hugs
+	* its content: a box sized by its own padded text cannot hug.
+	* A box sized by its content can, and the stretch is then what
+	* widens every row to the widest one — so a menu no longer
+	* pads its labels to align them.
+	*
+	* A label too long for the width it is given is truncated at
+	* the tail with an `…`.
 	*/
 	fullWidth: boolean;
 	/**
-	* Style applied while the pointer is over this button. `None`
-	* (the default) leaves it looking the same hovered as not.
+	* Style applied while the pointer is over this button. Omit it
+	* (the default) to leave it looking the same hovered as not.
 	*
 	* Hover is host state — it changes with mouse motion and no
 	* plugin round-trip — so the plugin declares the *appearance*
@@ -1725,12 +2352,25 @@ type WidgetSpec = {
 	* shared "close affordance under the pointer" key — the tab
 	* `×` and the file explorer's `×` both read it, so a plugin
 	* naming it gets the same highlight users already know.
-	*
-	* `Button` is the first kind to carry this; other widget kinds
-	* adopt it with the same field plus a `ctx.is_hovered(key)`
-	* check in their renderer.
 	*/
 	hoverStyle?: Partial<OverlayOptions>;
+	/**
+	* How the button looks at rest — not focused, not hovered,
+	* not disabled. Omit it (the default) to keep the look its
+	* `intent` gives it.
+	*
+	* The sibling of `hover_style`, and the answer to the same
+	* question one state earlier: `hover_style` could say what a
+	* control looks like under the pointer, but nothing could say
+	* that it is a control at all. A bare button is just its
+	* label, so without this the only way to mark a word as
+	* clickable was to spend a colour on it — and `intent` offers
+	* three fixed looks, none of them an underline.
+	*
+	* Focus, hover and disabled each still win over it, in that
+	* order of immediacy.
+	*/
+	style?: Partial<OverlayOptions>;
 } | {
 	"kind": "spacer";
 	cols: number;
@@ -1770,7 +2410,7 @@ type WidgetSpec = {
 	selectedIndex: number;
 	/**
 	* Number of rows of the panel's available height the list
-	* should occupy. `None` (omitted) = auto: the host sizes the
+	* should occupy. Omitted = auto: the host sizes the
 	* window from the panel height it already knows, so the
 	* plugin never re-derives layout arithmetic. An explicit
 	* value pins the window to that many rows, exactly as
@@ -1788,6 +2428,15 @@ type WidgetSpec = {
 	* dispatch.
 	*/
 	focusable: boolean;
+	/**
+	* Typing jumps the selection to the next item whose text starts
+	* with what was typed (the listbox pattern's type-ahead). Off by
+	* default: a list that is a command surface — Git Log's `q`, a
+	* dock's single-key actions — binds those letters in its mode, and
+	* the focused widget is asked first. Turn it on for a list of names
+	* to find, such as a file browser.
+	*/
+	typeAhead: boolean;
 	key?: string | null;
 } | {
 	"kind": "tree";
@@ -1796,26 +2445,28 @@ type WidgetSpec = {
 	selectedIndex: number;
 	/**
 	* Rows of the panel's available height the tree occupies.
-	* `None` (omitted) = auto from the host-known panel height;
+	* Omitted = auto from the host-known panel height;
 	* an explicit value pins the window as before. (Legacy
 	* fallback when the host has no height: 20 rows.)
 	*/
 	visibleRows?: number | null;
 	/**
-	* Initial-only set of expanded item keys. Once the widget
-	* has rendered, the host's instance-state `expanded_keys`
-	* is authoritative; updating this field on subsequent specs
-	* has no effect (use `WidgetMutation::SetExpandedKeys` to
-	* override host state).
+	* Seed set of expanded item keys, drawn until the host's
+	* instance state has an expansion of its own (a Right/Left,
+	* a disclosure click, a selection write, or a
+	* `setExpandedKeys` mutation). From then on the
+	* instance state is what is drawn and navigated, and
+	* changing this field on later specs has no effect — use
+	* `editor.widgetMutate(panel, { kind: "setExpandedKeys", ... })` to change it.
 	*/
 	expandedKeys: Array<string>;
 	/**
-	* When true, every node with `checked: Some(_)` renders a
+	* When true, every node with `checked` set renders a
 	* `[v]` / `[ ]` glyph and emits a `toggle` hit area over
 	* the glyph. Click on the glyph fires `widget_event {
 	* event_type: "toggle", payload: { key, checked: <new> } }`;
 	* the plugin updates its model and pushes the new state
-	* back via `WidgetMutation::SetCheckedKeys`.
+	* back via `editor.widgetMutate(panel, { kind: "setCheckedKeys", ... })`.
 	*/
 	checkable: boolean;
 	/**
@@ -1849,6 +2500,20 @@ type WidgetSpec = {
 	* the disclosure glyph (or the blank standing in for one).
 	*/
 	indentCols: number;
+	/**
+	* When true, a click anywhere on a node with children toggles its
+	* expansion (and selects it), not only a click on the disclosure
+	* glyph. The toggle fires `expand` with `{ index, key, expanded }`.
+	*/
+	toggleOnClick: boolean;
+	/**
+	* **A table.** Columns declared here turn every node that carries
+	* `cells` into a row of them: the host measures the cells, fits the
+	* columns to the width layout gives the tree (the widest gives
+	* first), elides each cell at its column's end, and draws a header
+	* row of the titles above the tree. Empty (default): a plain tree.
+	*/
+	columns?: Array<TableColumn>;
 	key?: string | null;
 } | {
 	"kind": "text";
@@ -1858,9 +2523,9 @@ type WidgetSpec = {
 	*/
 	value: string;
 	/**
-	* Initial byte-offset cursor within `value`. Negative
-	* (encoded as `i32` in JSON) means "no cursor" — clamped
-	* to `[0, value.len()]` host-side.
+	* Initial byte-offset cursor within `value`. A negative
+	* number means "no cursor"; other values are clamped
+	* host-side to the byte length of `value`.
 	*/
 	cursorByte: number;
 	/**
@@ -1928,7 +2593,7 @@ type WidgetSpec = {
 	*
 	* Plugins push candidates in response to the text
 	* widget's `change` event via
-	* `WidgetMutation::SetCompletions`. An empty `items`
+	* `editor.widgetMutate(panel, { kind: "setCompletions", ... })`. An empty `items`
 	* closes the popup.
 	*/
 	completions?: Array<string | CompletionItem>;
@@ -1941,6 +2606,20 @@ type WidgetSpec = {
 	* more to scroll. `0` (default) falls back to `5`.
 	*/
 	completionsVisibleRows: number;
+	/**
+	* A multi-line field that **grows with its text**: the smallest
+	* number of editing rows it shows (`rows` when `0`). Only read when
+	* `max_rows` is set.
+	*/
+	minRows: number;
+	/**
+	* A multi-line field that **grows with its text**: when `> 0`, the
+	* editing region is as tall as its value wraps to — at the width
+	* layout actually gives it — between `min_rows` and this, and
+	* scrolls (keeping its caret in view) past it. `0` (default): the
+	* region is `rows` tall, as before.
+	*/
+	maxRows: number;
 	/**
 	* Paint the caret as a REVERSED block cell inside the row
 	* (in addition to publishing the hardware-cursor position).
@@ -1987,6 +2666,20 @@ type WidgetSpec = {
 	* changes via a spec update.
 	*/
 	markdown: boolean;
+	/**
+	* A single-line field that offers a list of values to pick from as
+	* well as free text — a combo box (the ARIA combobox pattern). Drawn
+	* with a `▼` in the last cell inside its `]` (`▲` while its
+	* completion list is open), so the field says it has a list before
+	* it is focused. The list itself is still the plugin's
+	* `completions`: with the list closed, ↓ / Alt+↓ or a press on the
+	* arrow fires `completion_request`, which the plugin answers with
+	* `setCompletions`; a press on the arrow with the list open closes
+	* it (`completion_dismiss`). Opening on focus is left out on
+	* purpose — a list that opens as a form is walked covers the fields
+	* under it. Defaults to `false`.
+	*/
+	combo: boolean;
 	key?: string | null;
 } | {
 	"kind": "labeledSection";
@@ -2010,16 +2703,36 @@ type WidgetSpec = {
 	* equal-split path.
 	*/
 	widthPct?: number | null;
+	/**
+	* When this section is a Block child of a Row, request exactly
+	* this many columns. Takes precedence over `width_pct`.
+	*
+	* A percent cannot express "a third of the row": the integer
+	* rounding does not divide, so three equal siblings either
+	* overflow the panel — and the host wraps the last one onto a
+	* line of its own — or leave a ragged remainder that all lands
+	* on one side. Columns are what a caller with a measure in mind
+	* actually has, and asking in them is exact.
+	*/
+	widthCols?: number | null;
 	key?: string | null;
+	/**
+	* How the section's own chrome — its border and its legend —
+	* looks while `key` is the hovered widget.
+	*
+	* A section emits no hit area of its own, so it never becomes
+	* the hovered widget by being pointed at. Give it the key of
+	* the control inside it and the frame answers with that
+	* control: a card whose rows share one key lights as a card
+	* rather than one row at a time.
+	*/
+	hoverStyle?: Partial<OverlayOptions>;
 } | {
 	"kind": "windowEmbed";
 	/**
 	* Numeric editor-window id, matching `WindowId(N).0`.
 	* `0` (or any unknown id) renders empty placeholder
 	* rows without dispatching the per-window render.
-	* `u32` rather than `u64` to keep the TS binding a
-	* plain `number`; window ids never exceed 4B in
-	* practice.
 	*/
 	windowId: number;
 	/**
@@ -2027,6 +2740,41 @@ type WidgetSpec = {
 	*/
 	rows: number;
 	key?: string | null;
+} | {
+	"kind": "label";
+	text: string;
+	style?: Partial<OverlayOptions>;
+	/**
+	* Indent into the field column of a form whose controls share
+	* this label width. `0` = flush left.
+	*/
+	labelWidth: number;
+	/**
+	* Two or more styled runs on the one row — a state glyph in the
+	* state's colour, then the name it belongs to. When non-empty
+	* these replace `text`, exactly as they do on a
+	* `TextPropertyEntry`; `style` still covers the whole row.
+	* Without this a plugin needing two inks on a line has to drop
+	* to `Raw`, which is a list of whole rows and no longer a label.
+	*/
+	segments?: Array<StyledSegment>;
+	/**
+	* Break the text across rows instead of clipping it, at the width
+	* layout settles on. Continuation rows start at the line's own
+	* leading indent — the marker gutter and `label_width` count, so a
+	* wrapped field hint stays inside the field column — and a word too
+	* long for a row of its own is broken rather than run off the edge.
+	*
+	* The alternative is the plugin wrapping the prose itself, which
+	* means deciding the width, which is layout's answer and not the
+	* plugin's: see `fresh_ui::desc::Wrap`.
+	*/
+	wrap: boolean;
+	/**
+	* How the row marks itself when it does not fit. See `Elide`.
+	* Ignored when `wrap` is set.
+	*/
+	elide: Elide;
 } | {
 	"kind": "raw";
 	entries: Array<TextPropertyEntry>;
@@ -2047,7 +2795,7 @@ type WidgetSpec = {
 	* Anchor `[row, col]` in the panel's inner coordinates the
 	* popup drops from (the host resolves the final screen rect
 	* — opening below the anchor, flipping above near the frame
-	* edge, clamped on screen). `None` anchors at the popup's
+	* edge, clamped on screen). Omitted, it anchors at the popup's
 	* own position in the tree.
 	*/
 	anchor?: [number, number] | null;
@@ -2058,6 +2806,95 @@ type WidgetSpec = {
 	*/
 	screenSpace: boolean;
 };
+/**
+* How the host should treat a mounted panel, beyond rendering its
+* spec.
+*
+* Every field is optional, and each one you leave out reads as what
+* the host did before that field existed. Unknown fields are ignored,
+* so options written for a newer editor don't stop an older one from
+* applying the ones it knows.
+*/
+type WidgetPanelOptions = {
+	/**
+	* When the focus key names no tabbable widget, fall back to the
+	* first one.
+	*
+	* True is the historical behaviour and stays the default. A panel
+	* for which *nothing focused* is a real resting state must say so:
+	* otherwise clearing focus does not clear it, because the next
+	* repaint silently re-seeds it onto whatever happens to be first.
+	* The plugin's own record of focus then disagrees with the host's,
+	* and a key meant for no one is delivered to that widget — on the
+	* welcome screen, leaving its file finder put focus on "Show this
+	* screen on startup", so the next Space turned the page off with
+	* nothing on screen to say why.
+	*
+	* Leaving it out is what every plugin written before this field said, and
+	* reads as `true`.
+	*/
+	autoFocusFirst?: boolean;
+	/**
+	* The panel is a *page*: its whole content scrolls together in a
+	* window the host owns, the way a document does, rather than each
+	* list windowing itself to the panel's height. Lists and text areas
+	* inside a page take their natural height. The arrow and page keys
+	* scroll it when no widget takes them, the wheel and its scrollbar
+	* move it, and `scrollToWidget` moves it to a widget by key.
+	*
+	* A buffer-mounted panel only; the dock and the floating panels
+	* window their lists. Unspecified reads as `false`.
+	*/
+	page?: boolean;
+	/**
+	* Keep this panel's focus and the reader's place on the same thing.
+	*
+	* For a `page` — a document laid out by
+	* widgets, in one window the host scrolls — focus and where the reader is
+	* are two answers
+	* to one question: what am I looking at. Left independent they contradict
+	* each other, and the contradiction is not cosmetic: Tab moves focus while
+	* the page stays three cards above, and a movement key moves the page
+	* while Enter still fires whatever the last Tab left focused — off screen,
+	* unasked for.
+	*
+	* Saying so makes the host maintain both directions. The movement keys
+	* (`Up`/`Down`, the page keys, `Home`/`End`) move a *reading row* through
+	* the page's content instead of scrolling the window, and focus goes to
+	* the widget on the row it lands on — or to nothing, when the row carries
+	* none. A focus move (Tab, Shift+Tab, a plugin's `setFocusKey`) puts the
+	* reader on the focused widget's own region, and the window follows
+	* minimally, so a Tab between two controls of one card does not move the
+	* page under them.
+	*
+	* "Nothing focused" is a state this option produces constantly — most rows
+	* of a page are prose — so a panel declaring it almost certainly wants
+	* `autoFocusFirst: false` too, and the Tab ring seeds from the reader
+	* rather than from the top of the document.
+	*
+	* Leaving it out reads as `false`: every panel written before this field keeps
+	* focus and the window independent.
+	*
+	* It makes `autoFocusFirst` false whatever the panel said. The pair is not a
+	* setting with two useful values; it is one broken combination, so
+	* it is not representable rather than advised against.
+	*/
+	focusFollowsCursor?: boolean;
+};
+/**
+* Where a widget should land when a plugin scrolls to it.
+*/
+type ScrollAlign = "top" | "minimal";
+/**
+* Action a plugin can request the widget runtime to perform on a
+* mounted panel, sent with `editor.widgetCommand(panelId, action)`.
+*
+* All actions target the panel's currently focused widget (the host
+* tracks focus per panel). They are fired by the plugin's mode
+* bindings — Tab → `FocusAdvance{+1}`, Enter → `Activate`,
+* Up/Down → `SelectMove{±1}`, Backspace → `TextInputKey{"Backspace"}`,
+* printable chars (via `mode_text_input`) → `TextInputChar{"x"}`.
+*/
 type WidgetAction = {
 	"kind": "focusAdvance";
 	delta: number;
@@ -2076,6 +2913,17 @@ type WidgetAction = {
 	"kind": "key";
 	key: string;
 };
+/**
+* Targeted in-place mutation of a mounted widget panel, sent with
+* `editor.widgetMutate(panelId, mutation)` — a faster way to apply a
+* small change than re-sending the whole spec. Plugins use these when
+* the model change touches one widget; the host applies the mutation
+* directly to the panel's spec / instance state and re-renders.
+*
+* `editor.updateWidgetPanel` remains the right tool for structural
+* changes (adding/removing widgets, restructuring layout). Both
+* paths preserve instance state via widget keys.
+*/
 type WidgetMutation = {
 	"kind": "setValue";
 	widgetKey: string;
@@ -2131,7 +2979,21 @@ type WidgetMutation = {
 } | {
 	"kind": "setFocusKey";
 	widgetKey: string;
+} | {
+	"kind": "previewTreeMove";
+	widgetKey: string;
+	sourceKey: string;
+	afterKey: string | null;
+	label: string;
+} | {
+	"kind": "endTreeMovePreview";
+	widgetKey: string;
+	commit: boolean;
 };
+/**
+* Per-call result from `SearchHandle.take()` — the matches accumulated since
+* the previous call plus terminal-state flags.
+*/
 type SearchTakeResult = {
 	/**
 	* Matches discovered since the previous take()
@@ -2160,6 +3022,9 @@ interface SearchHandle {
 	take(): SearchTakeResult;
 	cancel(): void;
 }
+/**
+* Result from replacing matches in a buffer
+*/
 type ReplaceResult = {
 	/**
 	* Number of replacements made
@@ -2169,6 +3034,24 @@ type ReplaceResult = {
 	* Buffer ID of the edited buffer
 	*/
 	bufferId: number;
+};
+/**
+* Result of creating a buffer group
+*/
+type BufferGroupResult = {
+	/**
+	* The group ID
+	*/
+	groupId: number;
+	/**
+	* Panel buffer IDs, keyed by panel name
+	*/
+	panels: Record<string, number>;
+	/**
+	* Panel split IDs, keyed by panel name: what `createScrollSyncGroup`,
+	* `setLineWrap` and `setLayoutHints` take to act on one panel.
+	*/
+	panelSplits: Record<string, number>;
 };
 type AuthorityPath = {
 	kind: "authority";
@@ -2211,9 +3094,13 @@ type PathTranslationSpec = {
 	host_root: string;
 	remote_root: string;
 };
+/**
+* Result from spawning a background process
+*/
 type BackgroundProcessResult = {
 	/**
-	* Unique process ID for later reference
+	* Unique process ID for later reference, e.g. with `killProcess` or
+	* `isProcessRunning`
 	*/
 	process_id: number;
 	/**
@@ -2222,17 +3109,65 @@ type BackgroundProcessResult = {
 	*/
 	exit_code: number;
 };
+/**
+* One piece of a buffer group's tab title, for `setBufferGroupTitle`.
+*/
+type BufferGroupTitleSegment = {
+	/**
+	* The text this piece of the title shows.
+	*/
+	text: string;
+	/**
+	* The panel this piece names, if any. While the file that panel shows
+	* has unsaved changes, the tab shows `*` right after this piece, as a
+	* file's own tab does after its name.
+	*/
+	panel?: string;
+};
+/**
+* Diff between current buffer content and last saved snapshot
+*/
 type BufferSavedDiff = {
 	equal: boolean;
 	byte_ranges: Array<[number, number]>;
 };
+/**
+* Result of `compareBuffers`: the line diff of two buffers, measured in
+* their own bytes.
+*/
+type CompareResult = {
+	/**
+	* Hunks in increasing order; empty when the buffers are equal.
+	*/
+	hunks: Array<CompareHunk>;
+	/**
+	* Lines in each buffer, a final unterminated line included.
+	*/
+	leftLines: number;
+	rightLines: number;
+	/**
+	* Each buffer's length in bytes.
+	*/
+	leftLen: number;
+	rightLen: number;
+	/**
+	* Each buffer's content version when it was read. An edit since bumps
+	* it, so a caller about to edit from these offsets can tell they are
+	* stale.
+	*/
+	leftVersion: number;
+	rightVersion: number;
+};
+/**
+* Options for createVirtualBufferInExistingSplit
+*/
 type CreateVirtualBufferInExistingSplitOptions = {
 	/**
-	* Buffer name (displayed in tabs/title)
+	* Buffer name (displayed in tabs/title), e.g. `"*Commit Details*"`
 	*/
 	name: string;
 	/**
-	* Target split ID (required)
+	* ID of the existing split to show the buffer in (required)
 	*/
 	splitId: number;
 	/**
@@ -2280,13 +3215,18 @@ type CreateVirtualBufferInExistingSplitOptions = {
 	*/
 	initialCursorLine?: number;
 };
+/**
+* Options for createVirtualBufferInSplit
+*/
 type CreateVirtualBufferInSplitOptions = {
 	/**
-	* Buffer name (displayed in tabs/title)
+	* Buffer name (displayed in tabs/title). By convention it is wrapped
+	* in asterisks, e.g. `"*Diagnostics*"`
 	*/
 	name: string;
 	/**
-	* Mode for keybindings (e.g., "git-log", "search-results")
+	* Mode for keybindings (e.g., "git-log", "search-results"); define
+	* it with `defineMode` first
 	*/
 	mode?: string;
 	/**
@@ -2294,7 +3234,8 @@ type CreateVirtualBufferInSplitOptions = {
 	*/
 	readOnly?: boolean;
 	/**
-	* Split ratio 0.0-1.0 (default: 0.5)
+	* Split ratio 0.0-1.0 (default: 0.5): the share of the first pane,
+	* which is the existing content unless `before` is set
 	*/
 	ratio?: number;
 	/**
@@ -2303,6 +3244,7 @@ type CreateVirtualBufferInSplitOptions = {
 	* The name describes the **divider**, not the arrangement:
 	* `"vertical"` puts the panes side by side (a vertical divider between
 	* them), `"horizontal"` stacks them. Same convention as `splitWindow`.
+	* Default: `"horizontal"`.
 	*/
 	direction?: string;
 	/**
@@ -2318,11 +3260,14 @@ type CreateVirtualBufferInSplitOptions = {
 	*/
 	showCursors?: boolean;
 	/**
-	* Disable text editing (default: false)
+	* Disable text editing (default: false): typing, deletion, cut,
+	* paste, undo and redo are refused, while navigation, selection and
+	* copy still work
 	*/
 	editingDisabled?: boolean;
 	/**
-	* Enable line wrapping
+	* Enable line wrapping (default: follow the editor's line-wrap
+	* setting)
 	*/
 	lineWrap?: boolean;
 	/**
@@ -2359,13 +3304,18 @@ type CreateVirtualBufferInSplitOptions = {
 	*/
 	scrollable?: boolean;
 };
+/**
+* Options for createVirtualBuffer
+*/
 type CreateVirtualBufferOptions = {
 	/**
-	* Buffer name (displayed in tabs/title)
+	* Buffer name (displayed in tabs/title). By convention it is wrapped
+	* in asterisks, e.g. `"*Diagnostics*"`
 	*/
 	name: string;
 	/**
-	* Mode for keybindings (e.g., "git-log", "search-results")
+	* Mode for keybindings (e.g., "git-log", "search-results"); define
+	* it with `defineMode` first
 	*/
 	mode?: string;
 	/**
@@ -2381,13 +3331,44 @@ type CreateVirtualBufferOptions = {
 	*/
 	showCursors?: boolean;
 	/**
-	* Disable text editing (default: false)
+	* Disable text editing (default: false): typing, deletion, cut,
+	* paste, undo and redo are refused, while navigation, selection and
+	* copy still work
 	*/
 	editingDisabled?: boolean;
 	/**
 	* Hide from tab bar (default: false)
 	*/
 	hiddenFromTabs?: boolean;
+	/**
+	* Open as a tab without taking the view (default: false).
+	*
+	* Creating a virtual buffer otherwise makes it the active buffer, and
+	* there is no quiet way back: switching away afterwards is a second
+	* visible switch, and the layout the panel composed while it briefly
+	* held the pane is not the one it gets later. Set this when the buffer
+	* is one the editor offers rather than one the reader asked for — a
+	* startup page beside a restored session — and it appears in the tab
+	* bar with the current buffer left alone.
+	*
+	* Ignored together with `hiddenFromTabs`, which has no tab bar to be
+	* background in.
+	*/
+	background?: boolean;
+	/**
+	* Current-line highlight for this buffer (default: follow the editor
+	* setting). Pass `false` for a page whose rows are laid out by a widget
+	* panel — the caret's line means nothing to the reader there, and a
+	* lit band across a centred wordmark is noise.
+	*/
+	highlightCurrentLine?: boolean;
+	/**
+	* Whether the buffer is user-scrollable (default: true). `false` for a
+	* buffer a widget panel is mounted into: the panel is described in the
+	* tree and its widgets — or, for a `page` panel, its one viewport —
+	* own the scrolling, and the buffer under them never moves.
+	*/
+	scrollable?: boolean;
 	/**
 	* Initial content as **spans, concatenated verbatim** — a span is a run
 	* of text with optional styling, not a line. Nothing inserts newlines
@@ -2430,6 +3411,10 @@ type CreateVirtualBufferOptions = {
 	*/
 	indentationGuide?: boolean;
 };
+/**
+* Result of a host-side baseline diff (`diffAgainstBaseline` /
+* `diffBaselinePair`).
+*/
 type DiffBaselineResult = {
 	/**
 	* The buffer content version the hunks were computed against (0 for
@@ -2451,6 +3436,9 @@ type DiffBaselineResult = {
 	*/
 	hunks: Array<LineDiffHunk>;
 };
+/**
+* A single match from project-wide grep
+*/
 type GrepMatch = {
 	/**
 	* Absolute file path
@@ -2473,14 +3461,25 @@ type GrepMatch = {
 	*/
 	line: number;
 	/**
-	* 1-indexed column number
+	* 1-indexed byte column within the line
 	*/
 	column: number;
 	/**
-	* The matched line content (for display)
+	* The matched line, for display — on a long line only up to 4096 bytes
+	* of it on each side of the match
 	*/
 	context: string;
+	/**
+	* Where the match starts in `context`, in bytes
+	*/
+	contextOffset: number;
 };
+/**
+* Language configuration for language packs
+*
+* This is a simplified version of the full LanguageConfig, containing only
+* the fields that can be set via the plugin API.
+*/
 type LanguagePackConfig = {
 	/**
 	* Comment prefix for line comments (e.g., "//" or "#")
@@ -2516,6 +3515,13 @@ type LanguagePackConfig = {
 	*/
 	formatter: FormatterPackConfig | null;
 };
+/**
+* One hunk from `computeLineDiff`: a maximal run of differing lines.
+* Line indices are 0-based; a line is a `\n`-terminated (or final
+* unterminated) segment of the input text. `old_count == 0` is a pure
+* insertion, `new_count == 0` a pure deletion, both non-zero a
+* replacement. Equal regions between hunks are not reported.
+*/
 type LineDiffHunk = {
 	/**
 	* First affected line in the old text (0-based).
@@ -2538,6 +3544,9 @@ type LocalPath = {
 	kind: "local";
 	value: string;
 };
+/**
+* LSP server configuration for language packs
+*/
 type LspServerPackConfig = {
 	/**
 	* Command to start the LSP server
@@ -2593,15 +3602,25 @@ type RemoteAgentSpec = {
 	base_env?: [string, string][];
 	/**
 	* When true, attach as a NEW window (born-attached, coexisting with the
-	* existing windows) instead of the default global restart that replaces the
-	* whole editor's authority. The Orchestrator sets this so a cloud session is
-	* a real session row beside local ones.
+	* existing windows) rather than re-pointing the window showing the current
+	* project. The Orchestrator sets this so a cloud session is a real session
+	* row beside local ones.
 	*/
 	window?: boolean;
 	/** Window label (window mode only). Omit to use the transport's display. */
 	label?: string;
 	/** Optional agent argv for the new window's seed terminal (window mode). */
 	command?: string[];
+	/**
+	* Grow this *preparing* window (from `createPreparingWindow`) into the
+	* session instead of minting a new one — window mode only. The
+	* Orchestrator opens a placeholder the user lands in while the connect
+	* runs, so a remote workspace is somewhere to be from the moment it is
+	* asked for, and a connect that fails reports on that page rather than
+	* only in the dock. Ignored if the window is gone by the time the connect
+	* lands.
+	*/
+	adopt_window?: number;
 };
 type RemoteIndicatorStatePayload = {
 	kind: "local";
@@ -2618,6 +3637,20 @@ type RemoteIndicatorStatePayload = {
 	kind: "disconnected";
 	label?: string | null;
 };
+/**
+* One marker painted on a split's vertical scrollbar track, at a position
+* proportional to its location in the buffer (an "overview ruler" mark).
+*
+* Position is a **byte offset** (`position`), which is the only coordinate
+* that is exact in every file-size regime — on a large file opened before the
+* incremental line scan completes, line numbers do not exist yet. `line` is a
+* convenience that the editor converts to a byte anchor when the marker is
+* set; it is dropped if the line cannot be resolved. Supply exactly one.
+*
+* `end` turns a point marker into a range marker, so a multi-line region
+* (a diff hunk, a folded block) paints a proportional streak rather than a
+* single cell.
+*/
 type ScrollbarMarker = {
 	/**
 	* Byte offset of the marked location. Preferred over `line`.
@@ -2654,13 +3687,18 @@ type ScrollbarMarker = {
 	*/
 	priority?: number;
 };
+/**
+* Result from spawning a process with spawnProcess
+*/
 type SpawnResult = {
 	/**
-	* Complete stdout as string
+	* Complete stdout as string, exactly as the process wrote it: newlines,
+	* including the trailing one, are kept
 	*/
 	stdout: string;
 	/**
-	* Complete stderr as string
+	* Complete stderr as string. When the process could not be started,
+	* it holds the error message instead (and `exit_code` is -1)
 	*/
 	stderr: string;
 	/**
@@ -2668,11 +3706,28 @@ type SpawnResult = {
 	*/
 	exit_code: number;
 };
+/**
+* A run of text with optional styling. `style` reuses
+* `OverlayOptions` — the same primitive plugins use for virtual
+* text — so a hint is just `{ text: "Alt+P cycle", style: { fg:
+* "ui.help_key_fg" } }`. Omitting `style` means "no styling override";
+* each consumer applies its own default (e.g. the floating-prompt
+* title uses `prompt_fg` + bold).
+*/
 type StyledText = {
 	text: string;
 	style?: Partial<OverlayOptions>;
 };
+/**
+* Result of getTextPropertiesAtCursor - array of property objects
+*
+* Each element contains the properties from a text property span that overlaps
+* with the cursor position. Properties are dynamic key-value pairs set by plugins.
+*/
 type TextPropertiesAtCursor = Array<Record<string, unknown>>;
+/**
+* Syntax highlight span for a buffer range
+*/
 type TsHighlightSpan = {
 	start: number;
 	end: number;
@@ -2680,6 +3735,9 @@ type TsHighlightSpan = {
 	bold: boolean;
 	italic: boolean;
 };
+/**
+* Result of creating a virtual buffer
+*/
 type VirtualBufferResult = {
 	/**
 	* The created buffer ID
@@ -2695,6 +3753,1525 @@ type WindowPath = {
 	window: number;
 	value: string;
 };
+/**
+* The editor's configuration, as returned by `editor.getConfig()` and `editor.getUserConfig()`. Generated from the config's JSON Schema.
+*
+* Every property is optional: `getUserConfig()` returns only the values the user set, and `getConfig()` the full merged config.
+*/
+interface FreshConfig {
+	/**
+	* Config format version, used for migration. Missing means version 0.
+	*
+	* Default: `0`
+	*/
+	version?: number;
+	/**
+	* Color theme name
+	*
+	* Default: `"high-contrast"`
+	*/
+	theme?: FreshConfig.ThemeOptions;
+	/**
+	* UI language. If not set, detected from LC_ALL, LC_MESSAGES or LANG.
+	*/
+	locale?: FreshConfig.LocaleOptions;
+	/**
+	* Check for new versions on startup (default: true).
+	* Also sends basic anonymous telemetry (version, OS, terminal type).
+	*
+	* Default: `true`
+	*/
+	check_for_updates?: boolean;
+	/**
+	* Offer to update from inside the editor when a new version is found (default: true).
+	* When off, the status-bar indicator only tells you an update exists.
+	* Needs `check_for_updates` and an install method that can self-update.
+	*
+	* Default: `true`
+	*/
+	self_update?: boolean;
+	/**
+	* When on (default), `fresh` with no arguments is `fresh -a`: it runs in a single
+	* background editor that outlives the terminal, and every later bare `fresh`
+	* reattaches to it. When off, it opens a plain editor in this terminal. Runs with
+	* files or flags are unaffected. Formerly `orchestrator_mode`.
+	*
+	* Default: `true`
+	*/
+	auto_attach?: boolean;
+	/**
+	* When on, `fresh` with no arguments reopens the workspace you used last,
+	* wherever you type it. When off (default), it opens the current directory.
+	* Works with Auto Attach on or off; runs with files or flags are
+	* unaffected.
+	*
+	* Default: `false`
+	*/
+	open_last_workspace?: boolean;
+	/**
+	* Editor behavior settings (indentation, line numbers, wrapping, etc.)
+	*/
+	editor?: FreshConfig.EditorConfig;
+	/**
+	* File explorer panel settings
+	*/
+	file_explorer?: FreshConfig.FileExplorerConfig;
+	/**
+	* Sidebar settings (the column that holds the file explorer).
+	*
+	* Default: `{"accordion":"free"}`
+	*/
+	sidebar?: FreshConfig.SidebarConfig;
+	/**
+	* File browser settings (Open File dialog)
+	*
+	* Default: `{"show_hidden":false}`
+	*/
+	file_browser?: FreshConfig.FileBrowserConfig;
+	/**
+	* Clipboard settings (which clipboard methods to use)
+	*
+	* Default: `{"use_osc52":true,"use_system_clipboard":true}`
+	*/
+	clipboard?: FreshConfig.ClipboardConfig;
+	/**
+	* Terminal settings
+	*/
+	terminal?: FreshConfig.TerminalConfig;
+	/**
+	* Custom keybindings (overrides for the active map)
+	*/
+	keybindings?: FreshConfig.Keybinding[];
+	/**
+	* Custom named keybinding maps. A map can inherit from another map.
+	*/
+	keybinding_maps?: Record<string, FreshConfig.KeymapConfig>;
+	/**
+	* Active keybinding map name
+	*
+	* Default: `"default"`
+	*/
+	active_keybinding_map?: FreshConfig.KeybindingMapOptions;
+	/**
+	* Per-language configuration overrides (tab size, formatters, etc.)
+	*/
+	languages?: Record<string, FreshConfig.LanguageConfig>;
+	/**
+	* Language used for files whose type can't be detected.
+	* Must be a key in `languages` (e.g. "bash"); its full settings apply.
+	*/
+	default_language?: string | null;
+	/**
+	* Master switch for language servers. When off, no server starts automatically;
+	* you can still start one with "Start/Restart LSP Server".
+	*
+	* Default: `true`
+	*/
+	lsp_enabled?: boolean;
+	/**
+	* Language servers per language. Each language takes one server or a list.
+	*/
+	lsp?: Record<string, FreshConfig.LspLanguageConfig>;
+	/**
+	* Language servers for all languages, run alongside those in `lsp`.
+	* Keyed by a unique server name (e.g. "quicklsp").
+	*/
+	universal_lsp?: Record<string, FreshConfig.LspLanguageConfig>;
+	/**
+	* Warning notification settings
+	*
+	* Default: `{"show_status_indicator":true}`
+	*/
+	warnings?: FreshConfig.WarningsConfig;
+	/**
+	* Per-plugin settings, by plugin name. Use it to turn plugins on or off.
+	*/
+	plugins?: Record<string, FreshConfig.PluginConfig>;
+	/**
+	* Package manager settings for plugin/theme installation
+	*/
+	packages?: FreshConfig.PackagesConfig;
+	/**
+	* Auto-activation of project environments (venv, direnv, mise, …).
+	*/
+	env?: FreshConfig.EnvConfig;
+}
+declare namespace FreshConfig {
+	/**
+	* Which clipboard methods copy/paste uses, tried in order: OSC 52 (modern
+	* terminals like Kitty, WezTerm), the system clipboard (X11/Wayland), then an
+	* internal clipboard. Disable a method if it hangs (e.g. PuTTY, some SSH setups).
+	*/
+interface ClipboardConfig {
+		/**
+		* Use the terminal's OSC 52 clipboard (default: true). Turn off if unsupported
+		* or it hangs.
+		*
+		* Default: `true`
+		*/
+		use_osc52?: boolean;
+		/**
+		* Use the X11/Wayland system clipboard (default: true). Turn off if there's
+		* no display server or it causes problems.
+		*
+		* Default: `true`
+		*/
+		use_system_clipboard?: boolean;
+	}
+	/**
+	* Terminal cursor style
+	*/
+type CursorStyle = "default" | "blinking_block" | "steady_block" | "blinking_bar" | "steady_bar" | "blinking_underline" | "steady_underline";
+	/**
+	* Editor behavior configuration
+	*/
+interface EditorConfig {
+		/**
+		* Enable UI animations (tab-switch slides, dashboard, drag-and-drop move previews, plugin effects).
+		* Turn off for a fully static UI, e.g. on slow terminals or over SSH.
+		*
+		* Default: `true`
+		*/
+		animations?: boolean;
+		/**
+		* Show a trail animation when the cursor jumps far (search, go-to-definition,
+		* pane switch). Needs `animations` on.
+		*
+		* Default: `true`
+		*/
+		cursor_jump_animation?: boolean;
+		/**
+		* Fade out the top and bottom two rows of each pane when there is more
+		* text beyond that edge. The edge the cursor is on is never faded.
+		*
+		* Default: `true`
+		*/
+		viewport_edge_fade?: boolean;
+		/**
+		* Show line numbers in the gutter (default for new buffers).
+		*
+		* Default: `true`
+		*/
+		line_numbers?: boolean;
+		/**
+		* Show line numbers relative to the cursor line.
+		*
+		* Default: `false`
+		*/
+		relative_line_numbers?: boolean;
+		/**
+		* Highlight the line containing the cursor
+		*
+		* Default: `true`
+		*/
+		highlight_current_line?: boolean;
+		/**
+		* Highlight all occurrences of the word under the cursor
+		*
+		* Default: `true`
+		*/
+		highlight_occurrences?: boolean;
+		/**
+		* Hide the current-line highlight while text is selected. Default: false
+		*
+		* Default: `false`
+		*/
+		hide_current_line_on_selection?: boolean;
+		/**
+		* Highlight the column containing the cursor
+		*
+		* Default: `false`
+		*/
+		highlight_current_column?: boolean;
+		/**
+		* Wrap long lines to fit the window width (default for new views)
+		*
+		* Default: `true`
+		*/
+		line_wrap?: boolean;
+		/**
+		* Indent wrapped lines to match the original line's indentation.
+		*
+		* Default: `true`
+		*/
+		wrap_indent?: boolean;
+		/**
+		* Number of text columns to wrap lines at (e.g. `80`), not counting the
+		* line-number gutter. Never wider than the window.
+		* `null` or `0` (default) wraps at the window edge.
+		*/
+		wrap_column?: number | null;
+		/**
+		* Text width in columns in page view, centered with margins. Default: 80.
+		* `null` or `0` uses the full window width.
+		*
+		* Default: `80`
+		*/
+		page_width?: number | null;
+		/**
+		* Enable syntax highlighting for code files.
+		*
+		* Default: `true`
+		*/
+		syntax_highlighting?: boolean;
+		/**
+		* Show the menu bar (File, Edit, View, …) at the top. Can be toggled at any time.
+		* Default: true
+		*
+		* Default: `true`
+		*/
+		show_menu_bar?: boolean;
+		/**
+		* Show a wave-animation screensaver after `screensaver_idle_minutes` with no
+		* input. Any key or mouse move ends it. Default: false
+		*
+		* Default: `false`
+		*/
+		screensaver_enabled?: boolean;
+		/**
+		* Idle minutes before the screensaver starts. `0` disables it. Default: 5
+		*
+		* Default: `5`
+		*/
+		screensaver_idle_minutes?: number;
+		/**
+		* Alt+letter opens menus (Alt+F for File, Alt+E for Edit, …). Turn off to free
+		* Alt+letter keys for other bindings. Default: true
+		*
+		* Default: `true`
+		*/
+		menu_bar_mnemonics?: boolean;
+		/**
+		* Show the tab bar of open files in each pane. Can be toggled at any time.
+		* Default: true
+		*
+		* Default: `true`
+		*/
+		show_tab_bar?: boolean;
+		/**
+		* Hide the tab bar while the window shows a single file: one pane
+		* holding one tab. It comes back as soon as a second tab or pane opens.
+		* Has no effect while the tab bar is turned off. Default: false
+		*
+		* Default: `false`
+		*/
+		auto_hide_tab_bar?: boolean;
+		/**
+		* Show the status bar at the bottom. Can be toggled at any time.
+		* Default: true
+		*
+		* Default: `true`
+		*/
+		show_status_bar?: boolean;
+		/**
+		* Which elements appear in the status bar and in what order.
+		*/
+		status_bar?: StatusBarConfig;
+		/**
+		* Starting state of the Case / Word / Regex search toggles. Toggles you
+		* change are remembered per workspace and take priority.
+		*/
+		search?: SearchConfig;
+		/**
+		* Always keep the bottom prompt line (search, open file, …) visible.
+		* When off (default), it only appears while a prompt is open.
+		*
+		* Default: `false`
+		*/
+		show_prompt_line?: boolean;
+		/**
+		* Show a vertical scrollbar in each pane. Can be toggled at any time.
+		* Default: true
+		*
+		* Default: `true`
+		*/
+		show_vertical_scrollbar?: boolean;
+		/**
+		* Show a horizontal scrollbar in each pane when line wrap is off and lines
+		* are wider than the window. Can be toggled at any time. Default: false
+		*
+		* Default: `false`
+		*/
+		show_horizontal_scrollbar?: boolean;
+		/**
+		* Show vim-style `~` markers on empty lines past the end of the file.
+		* Default: true
+		*
+		* Default: `true`
+		*/
+		show_tilde?: boolean;
+		/**
+		* Use Nerd Font icons in the UI (e.g. settings category icons). Only turn on
+		* if your terminal uses a Nerd Font, or icons show as `?` or boxes. Default: false
+		*
+		* Default: `false`
+		*/
+		nerd_font_icons?: boolean;
+		/**
+		* Use the terminal's background instead of the theme's, so terminal
+		* transparency or custom backgrounds show through. Default: false
+		*
+		* Default: `false`
+		*/
+		use_terminal_bg?: boolean;
+		/**
+		* Set the terminal window title to "<file> — Fresh" for the active buffer.
+		* Default: true
+		*
+		* Default: `true`
+		*/
+		set_window_title?: boolean;
+		/**
+		* Name terminal tabs after the running program (e.g. `python3`) and its title,
+		* instead of the fixed `*Terminal N*`. Default: true
+		*
+		* Default: `true`
+		*/
+		terminal_auto_title?: boolean;
+		/**
+		* Cursor shape: block, bar or underline, blinking or steady.
+		* Default: the terminal's own style.
+		*
+		* Default: `"default"`
+		*/
+		cursor_style?: CursorStyle;
+		/**
+		* Draw vertical lines at these columns, e.g. [80, 120]. Default: none.
+		* Columns count screen cells from 1, so tabs and wide characters (CJK, emoji)
+		* can differ from the status bar's column.
+		*/
+		rulers?: number[];
+		/**
+		* Vertical lines at each indent level (based on tab size). Display only.
+		* `none` (default): off. `all`: every level. `active`: only the cursor's block.
+		*
+		* Default: `"none"`
+		*/
+		indentation_guide?: IndentationGuideMode;
+		/**
+		* Character for indentation guides; use a single-width one. Blank resets
+		* to the default. Default: ▏
+		*
+		* Default: `"▏"`
+		*/
+		indentation_guide_glyph?: string;
+		/**
+		* Color indentation guides by level, using the theme's `indent_rainbow_1`–`6`
+		* colors. Default: false
+		*
+		* Default: `false`
+		*/
+		rainbow_indentation?: boolean;
+		/**
+		* Master switch for whitespace markers (·, →). When off, none are shown,
+		* whatever the settings below say. Default: true
+		*
+		* Default: `true`
+		*/
+		whitespace_show?: boolean;
+		/**
+		* Show · for spaces used as indentation. Default: false
+		*
+		* Default: `false`
+		*/
+		whitespace_spaces_leading?: boolean;
+		/**
+		* Show · for spaces between words. Default: false
+		*
+		* Default: `false`
+		*/
+		whitespace_spaces_inner?: boolean;
+		/**
+		* Show · for spaces at the end of a line. Default: false
+		*
+		* Default: `false`
+		*/
+		whitespace_spaces_trailing?: boolean;
+		/**
+		* Show → for tabs used as indentation. Languages can override this with
+		* `show_whitespace_tabs`. Default: true
+		*
+		* Default: `true`
+		*/
+		whitespace_tabs_leading?: boolean;
+		/**
+		* Show → for tabs between words. Languages can override this with
+		* `show_whitespace_tabs`. Default: true
+		*
+		* Default: `true`
+		*/
+		whitespace_tabs_inner?: boolean;
+		/**
+		* Show → for tabs at the end of a line. Languages can override this with
+		* `show_whitespace_tabs`. Default: true
+		*
+		* Default: `true`
+		*/
+		whitespace_tabs_trailing?: boolean;
+		/**
+		* Show ↵ at the end of every line. Default: false
+		*
+		* Default: `false`
+		*/
+		whitespace_newlines?: boolean;
+		/**
+		* Show ␍ for the CR in CRLF line endings. Stray CR characters always show
+		* as `<0D>`. Default: false
+		*
+		* Default: `false`
+		*/
+		whitespace_carriage_returns?: boolean;
+		/**
+		* Show whitespace markers (·, →) inside a selection, even if they are
+		* hidden elsewhere. Default: true
+		*
+		* Default: `true`
+		*/
+		whitespace_in_selection?: boolean;
+		/**
+		* Tab key inserts a tab character instead of spaces. Languages can
+		* override this. Default: false (spaces)
+		*
+		* Default: `false`
+		*/
+		use_tabs?: boolean;
+		/**
+		* Spaces per tab. `0` means the default (4).
+		*
+		* Default: `4`
+		*/
+		tab_size?: number;
+		/**
+		* Indent new lines to match the previous line.
+		*
+		* Default: `true`
+		*/
+		auto_indent?: boolean;
+		/**
+		* Typing `(`, `[`, `{`, `"`, `'` or `` ` `` inserts the closing one too. Typing a
+		* closer skips over an existing one; Backspace between a pair deletes both. Default: true
+		*
+		* Default: `true`
+		*/
+		auto_close?: boolean;
+		/**
+		* Typing `(`, `[`, `{`, `"`, `'` or `` ` `` with text selected wraps the
+		* selection instead of replacing it. Default: true
+		*
+		* Default: `true`
+		*/
+		auto_surround?: boolean;
+		/**
+		* Let the cursor go past the end of a line. "off" (default): never.
+		* "block": only block selections. "on": also arrows and clicks; typing there fills with spaces.
+		*
+		* Default: `"off"`
+		*/
+		virtual_space?: VirtualSpaceMode;
+		/**
+		* Lines to keep visible above and below the cursor when scrolling.
+		*
+		* Default: `3`
+		*/
+		scroll_offset?: number;
+		/**
+		* Line ending for new files; opened files keep their own. "lf" (Unix/macOS,
+		* default), "crlf" (Windows) or "cr" (classic Mac).
+		*
+		* Default: `"lf"`
+		*/
+		default_line_ending?: LineEndingOption;
+		/**
+		* Remove spaces at line ends when saving. Default: false
+		*
+		* Default: `false`
+		*/
+		trim_trailing_whitespace_on_save?: boolean;
+		/**
+		* Add a final newline when saving, if missing. Default: false
+		*
+		* Default: `false`
+		*/
+		ensure_final_newline_on_save?: boolean;
+		/**
+		* Open files read-only if they aren't writable or are in a library folder
+		* (node_modules, rustup, /usr/include, /nix/store, …). Binary files are
+		* always read-only. Default: true
+		*
+		* Default: `true`
+		*/
+		auto_read_only?: boolean;
+		/**
+		* Highlight the matching bracket when the cursor is on a bracket. Default: true
+		*
+		* Default: `true`
+		*/
+		highlight_matching_brackets?: boolean;
+		/**
+		* Color nested brackets by depth. Needs `highlight_matching_brackets`. Default: true
+		*
+		* Default: `true`
+		*/
+		rainbow_brackets?: boolean;
+		/**
+		* Show the completion popup automatically while typing. When off (default),
+		* it only opens on request (e.g. Ctrl+Space).
+		*
+		* Default: `false`
+		*/
+		completion_popup_auto_show?: boolean;
+		/**
+		* Suggest completions on any typing, not just after `.` or `::`.
+		* Needs `completion_popup_auto_show`. Default: true
+		*
+		* Default: `true`
+		*/
+		quick_suggestions?: boolean;
+		/**
+		* Milliseconds to wait before showing suggestions. Trigger characters like `.`
+		* skip the wait. Default: 150
+		*
+		* Default: `150`
+		*/
+		quick_suggestions_delay_ms?: number;
+		/**
+		* Show completions right away after `.`, `::` or `->`, with no delay. Default: true
+		*
+		* Default: `true`
+		*/
+		suggest_on_trigger_characters?: boolean;
+		/**
+		* Show inline type and parameter hints from the language server.
+		*
+		* Default: `true`
+		*/
+		enable_inlay_hints?: boolean;
+		/**
+		* Request semantic highlighting for the whole file, not just the visible
+		* range. Default: false (lighter).
+		*
+		* Default: `false`
+		*/
+		enable_semantic_tokens_full?: boolean;
+		/**
+		* Show the most severe error/warning message at the end of its line. Default: false
+		*
+		* Default: `false`
+		*/
+		diagnostics_inline_text?: boolean;
+		/**
+		* Lines scrolled per mouse wheel notch, everywhere (minimum 1). Shift+wheel
+		* is not affected. Default: 3
+		*
+		* Default: `3`
+		*/
+		mouse_wheel_scroll_lines?: number;
+		/**
+		* Scroll a wheel notch one line at a time instead of jumping. Slow terminals
+		* fall back to a jump. Needs `animations` on.
+		*
+		* Default: `true`
+		*/
+		smooth_scroll?: boolean;
+		/**
+		* Show documentation when hovering the mouse over code.
+		* On Windows it also turns on full mouse-motion tracking, which may garble input
+		* on some systems. Default: true (macOS/Linux), false (Windows)
+		*
+		* Default: `true`
+		*/
+		mouse_hover_enabled?: boolean;
+		/**
+		* Milliseconds before hover info appears. Lower is faster but loads the
+		* language server more. Default: 500
+		*
+		* Default: `500`
+		*/
+		mouse_hover_delay_ms?: number;
+		/**
+		* Max milliseconds between two clicks to count as a double-click. Default: 500
+		*
+		* Default: `500`
+		*/
+		double_click_time_ms?: number;
+		/**
+		* Auto-save changed files to disk every `auto_save_interval_secs`. Default: false
+		*
+		* Default: `false`
+		*/
+		auto_save_enabled?: boolean;
+		/**
+		* Seconds between auto-saves, when `auto_save_enabled` is on. Default: 30
+		*
+		* Default: `30`
+		*/
+		auto_save_interval_secs?: number;
+		/**
+		* Keep unsaved changes, including unnamed buffers, when you quit, and restore
+		* them next time. Default: true
+		*
+		* Default: `true`
+		*/
+		hot_exit?: boolean;
+		/**
+		* Always ask before quitting, even with nothing unsaved. (Unsaved changes are
+		* always confirmed.) Default: false
+		*
+		* Default: `false`
+		*/
+		confirm_quit?: boolean;
+		/**
+		* Restore tabs, splits, cursors and the file explorer from the last exit in
+		* the same directory. The session is still saved when off; `--no-restore`
+		* skips both. Default: true
+		*
+		* Default: `true`
+		*/
+		restore_previous_session?: boolean;
+		/**
+		* When started with files (e.g. `fresh main.rs`, or as git's editor), open only
+		* those files: the session is neither restored nor saved, no dock opens, and only
+		* those files' unsaved changes come back. Off makes it a full session. Default: true
+		*
+		* Default: `true`
+		*/
+		skip_session_restore_when_files_passed?: boolean;
+		/**
+		* Files whose cursor, scroll and folds are never remembered, because other tools
+		* rewrite them. Plain names match exactly; `*`/`?` globs match the full path if they
+		* include folders, else the file name. Default: `["**\/.git/**"]` (e.g. `COMMIT_EDITMSG`)
+		*
+		* Default: `["**\/.git/**"]`
+		*/
+		ephemeral_file_patterns?: string[];
+		/**
+		* Open an empty `[No Name]` tab when the last tab is closed. When off, the
+		* workspace stays blank (with `file_explorer.auto_open_on_last_buffer_close`
+		* also off, nothing opens). Default: true
+		*
+		* Default: `true`
+		*/
+		auto_create_empty_buffer_on_last_buffer_close?: boolean;
+		/**
+		* Periodically save changes to recovery files, so work survives a crash.
+		*
+		* Default: `true`
+		*/
+		recovery_enabled?: boolean;
+		/**
+		* Seconds between recovery saves, when `recovery_enabled` is on. Default: 2
+		*
+		* Default: `2`
+		*/
+		auto_recovery_save_interval_secs?: number;
+		/**
+		* How often (ms) to check open files for outside changes. A buffer is
+		* checked unless auto-revert is off for it ("Toggle Auto-Revert (Current
+		* Buffer)"). Lower is faster but uses more CPU. Default: 2000
+		*
+		* Default: `2000`
+		*/
+		auto_revert_poll_interval_ms?: number;
+		/**
+		* Read Escape and modified keys reliably (kitty keyboard protocol, needs
+		* terminal support). Default: true
+		*
+		* Default: `true`
+		*/
+		keyboard_disambiguate_escape_codes?: boolean;
+		/**
+		* Report key repeat and release events (kitty keyboard protocol, needs
+		* terminal support). Default: false
+		*
+		* Default: `false`
+		*/
+		keyboard_report_event_types?: boolean;
+		/**
+		* Report alternate keycodes as well as the base key (kitty keyboard protocol,
+		* needs terminal support). Default: true
+		*
+		* Default: `true`
+		*/
+		keyboard_report_alternate_keys?: boolean;
+		/**
+		* Report every key as an escape code; needed for repeat/release on plain
+		* keys (kitty keyboard protocol, needs terminal support). Default: false
+		*
+		* Default: `false`
+		*/
+		keyboard_report_all_keys_as_escape_codes?: boolean;
+		/**
+		* Edits between undo history snapshots.
+		*
+		* Default: `100`
+		*/
+		snapshot_interval?: number;
+		/**
+		* Bytes around the visible area read for syntax highlighting. More is more
+		* accurate for long strings/comments but slower on big files. Default: 10000
+		*
+		* Default: `10000`
+		*/
+		highlight_context_bytes?: number;
+		/**
+		* Files over this size (bytes) count as large: they load lazily, skip
+		* language servers, and get a fixed-size scrollbar thumb. Default: 10 MB
+		*
+		* Default: `10485760`
+		*/
+		large_file_threshold_bytes?: number;
+		/**
+		* Assumed average line length in bytes, used to estimate line positions in
+		* large files. Typical: 80–120.
+		*
+		* Default: `80`
+		*/
+		estimated_line_length?: number;
+		/**
+		* Max parallel file reads during bulk I/O. Higher helps on remote
+		* filesystems. Default: 64
+		*
+		* Default: `64`
+		*/
+		read_concurrency?: number;
+		/**
+		* How often (ms) the file explorer checks open folders for added or removed
+		* files. Lower is faster but uses more CPU. Default: 3000
+		*
+		* Default: `3000`
+		*/
+		file_tree_poll_interval_ms?: number;
+	}
+	/**
+	* Which marker files identify a project environment and how to activate it.
+	* The same markers drive the Workspace Trust prompt. You can add or override detectors.
+	*/
+interface EnvConfig {
+		/**
+		* Detectors in order; the first that matches the workspace root wins.
+		* Defaults cover venv, direnv, mise, pipenv and poetry.
+		*/
+		detectors?: EnvDetector[];
+	}
+	/**
+	* One environment detector: its markers, risk, activation command and name.
+	*/
+interface EnvDetector {
+		/**
+		* Short label shown in the status pill (e.g. ".venv", "direnv", "mise").
+		*/
+		name?: string;
+		/**
+		* Files or folders at the workspace root; the detector matches if any exists.
+		*/
+		markers?: string[];
+		/**
+		* Activation risk class.
+		*/
+		kind?: EnvKind;
+		/**
+		* Shell command that activates the environment, run from the workspace root.
+		* Prefer relative paths (e.g. `source .venv/bin/activate`). `{dir}` expands to the
+		* workspace root, but avoid it unless you control the path (shell-injection risk).
+		*/
+		snippet?: string;
+		/**
+		* Paths (relative to the workspace root) of which at least one must also exist,
+		* e.g. the Python interpreter inside `.venv`. Empty means markers are enough.
+		*/
+		require?: string[];
+	}
+	/**
+	* How risky activation is; decides whether a trust prompt is needed first.
+	*/
+type EnvKind = "path-only" | "shell";
+	/**
+	* Either a percent like "30%" (0–100) or an absolute column count like "24".
+	*/
+type ExplorerWidth = string;
+	/**
+	* Open File dialog settings.
+	*/
+interface FileBrowserConfig {
+		/**
+		* Show hidden files (starting with `.`) by default.
+		*
+		* Default: `false`
+		*/
+		show_hidden?: boolean;
+	}
+	/**
+	* File explorer settings.
+	*/
+interface FileExplorerConfig {
+		/**
+		* Apply `.gitignore` rules. When off, ignored files are neither hidden nor
+		* grayed out. Default: true
+		*
+		* Default: `true`
+		*/
+		respect_gitignore?: boolean;
+		/**
+		* Show hidden files (starting with `.`) by default.
+		*
+		* Default: `false`
+		*/
+		show_hidden?: boolean;
+		/**
+		* Show gitignored files by default.
+		*
+		* Default: `false`
+		*/
+		show_gitignored?: boolean;
+		/**
+		* Extra patterns to ignore, on top of `.gitignore`, written as
+		* `.gitignore` lines relative to the project root (`build/`, `/dist`,
+		* `*.log`, `!keep.log`). The file explorer, Quick Open, project search
+		* and Live Grep all leave out what they match.
+		*/
+		custom_ignore_patterns?: string[];
+		/**
+		* Explorer width: a percent (`"30%"`, 0–100) or a column count (`"24"`).
+		* A plain number is read as a percent; `0.3` means 30%.
+		*
+		* Default: `"30%"`
+		*/
+		width?: ExplorerWidth;
+		/**
+		* A single click opens a temporary preview tab that the next click replaces.
+		* Editing, double-click, Enter or dragging the tab makes it permanent. Default: true
+		*
+		* Default: `true`
+		*/
+		preview_tabs?: boolean;
+		/**
+		* Screen side for the file explorer. Default: left
+		*
+		* Default: `"left"`
+		*/
+		side?: FileExplorerSide;
+		/**
+		* Reveal and select the current file in the tree whenever you switch files.
+		* Skipped while the sidebar is hidden or focused, and for files outside the
+		* project. Default: false
+		*
+		* Default: `false`
+		*/
+		follow_active_buffer?: boolean;
+		/**
+		* Focus the file explorer when the last tab is closed. Turn off for a blank
+		* workspace where nothing opens by itself. Default: true
+		*
+		* Default: `true`
+		*/
+		auto_open_on_last_buffer_close?: boolean;
+		/**
+		* Show chains of folders that each hold only one folder on one line, e.g.
+		* `src/main/java/com/example`. Default: true
+		*
+		* Default: `true`
+		*/
+		compact_directories?: boolean;
+		/**
+		* Symbol before a closed folder (one character recommended). Default: ">"
+		*
+		* Default: `">"`
+		*/
+		tree_indicator_collapsed?: string;
+		/**
+		* Symbol before an open folder (one character recommended). Default: "▼"
+		*
+		* Default: `"▼"`
+		*/
+		tree_indicator_expanded?: string;
+	}
+	/**
+	* Side placement for the file explorer panel.
+	*/
+type FileExplorerSide = "left" | "right";
+	/**
+	* Formatter for a language.
+	*/
+interface FormatterConfig {
+		/**
+		* Formatter command (e.g. "rustfmt", "prettier").
+		*/
+		command?: string;
+		/**
+		* Arguments for the formatter. "$FILE" is replaced by the file path.
+		*/
+		args?: string[];
+		/**
+		* Send the text on stdin and read the result from stdout (default: true).
+		*
+		* Default: `true`
+		*/
+		stdin?: boolean;
+		/**
+		* Timeout in milliseconds (default: 10000)
+		*
+		* Default: `10000`
+		*/
+		timeout_ms?: number;
+	}
+	/**
+	* Auto-indent rules used when you press Enter. Each is an optional regex (no
+	* look-around or back-references), matched with strings and comments ignored.
+	* Unset patterns keep the language's built-in rules.
+	*/
+interface IndentRulesConfig {
+		/**
+		* If the current line matches, the new line is indented one level deeper.
+		* E.g. `[\{\[\(]\s*$` (ends with an open bracket) or `:\s*$` (Python).
+		*/
+		increase_indent_pattern?: string | null;
+		/**
+		* If a line matches, it is dedented one level, also while typing.
+		* E.g. `^\s*[\}\]\)]` (starts with a closing bracket). Include terminators
+		* like Python's `:` so words starting with a keyword don't dedent.
+		*/
+		decrease_indent_pattern?: string | null;
+		/**
+		* Like `increase_indent_pattern`, but only for the next line.
+		* E.g. `^\s*(if|for|while)\b.*\)\s*$` (an `if` without braces).
+		*/
+		indent_next_line_pattern?: string | null;
+		/**
+		* If the current line matches, the next line is dedented one level.
+		* E.g. `^\s*(return|pass|raise|break|continue)\b` (Python).
+		*/
+		dedent_next_line_pattern?: string | null;
+		/**
+		* Cancels `increase_indent_pattern` when the line also closes its block,
+		* e.g. Ruby `\bend\b` for `def f; end`.
+		*/
+		self_close_pattern?: string | null;
+	}
+	/**
+	* Indentation guide rendering mode.
+	*
+	* Default: `"none"`
+	*/
+type IndentationGuideMode = "none" | "all" | "active";
+	/**
+	* A single key in a sequence
+	*/
+interface KeyPress {
+		/**
+		* Key name (e.g., "a", "Enter", "F1")
+		*/
+		key?: string;
+		/**
+		* Modifiers (e.g., ["ctrl"], ["ctrl", "shift"])
+		*/
+		modifiers?: string[];
+	}
+	/**
+	* Keybinding definition
+	*/
+interface Keybinding {
+		/**
+		* Key name (e.g. "a", "Enter", "F1") for a single-key binding.
+		*/
+		key?: string;
+		/**
+		* Modifiers (e.g. ["ctrl"], ["ctrl", "shift"]) for a single-key binding.
+		*/
+		modifiers?: string[];
+		/**
+		* Key sequence for a chord, e.g. [{"key": "x", "modifiers": ["ctrl"]}, {"key": "s", "modifiers": ["ctrl"]}].
+		* Overrides `key` + `modifiers`.
+		*/
+		keys?: KeyPress[];
+		/**
+		* The whole binding as one string, e.g. `"C-x"`, `"C-S-Left"`, `"C-x C-s"`.
+		* `key` + `modifiers` and `keys` win if set.
+		*/
+		chord?: string;
+		/**
+		* Action to run (e.g. "move_left"), or "unbind" to remove the built-in binding for this key.
+		*/
+		action?: string;
+		/**
+		* Arguments for the action (optional).
+		*/
+		args?: Record<string, unknown>;
+		/**
+		* Condition for when the binding applies (optional, e.g. "mode == insert").
+		*/
+		when?: string | null;
+	}
+	/**
+	* Available keybinding maps
+	*/
+type KeybindingMapOptions = "default" | "emacs" | "vscode" | "macos" | "macos-gui";
+	/**
+	* A keymap (built-in or custom).
+	*/
+interface KeymapConfig {
+		/**
+		* Keymap to inherit from (optional).
+		*/
+		inherits?: string | null;
+		/**
+		* Keybindings in this keymap.
+		*/
+		bindings?: Keybinding[];
+	}
+	/**
+	* Settings for one language.
+	*/
+interface LanguageConfig {
+		/**
+		* File extensions (e.g. ["rs"] for Rust).
+		*/
+		extensions?: string[];
+		/**
+		* Exact file names (e.g. ["Makefile", "GNUmakefile"]).
+		*/
+		filenames?: string[];
+		/**
+		* Tree-sitter grammar name.
+		*
+		* Default: `""`
+		*/
+		grammar?: string;
+		/**
+		* Line comment prefix (e.g. "//").
+		*/
+		comment_prefix?: string | null;
+		/**
+		* Auto-indent new lines.
+		*
+		* Default: `true`
+		*/
+		auto_indent?: boolean;
+		/**
+		* Auto-close brackets and quotes. `null` uses `editor.auto_close`.
+		*/
+		auto_close?: boolean | null;
+		/**
+		* Wrap selections in typed brackets/quotes. `null` uses `editor.auto_surround`.
+		*/
+		auto_surround?: boolean | null;
+		/**
+		* Custom grammar file for files with this language's extensions (optional).
+		* Must be a Sublime Text `.sublime-syntax` file; `.tmLanguage` is not supported.
+		*/
+		textmate_grammar?: string | null;
+		/**
+		* Show → for tabs (default: true). Turn off for tab-indented languages like Go.
+		*
+		* Default: `true`
+		*/
+		show_whitespace_tabs?: boolean;
+		/**
+		* Wrap long lines (e.g. for Markdown). `null` uses `editor.line_wrap`.
+		*/
+		line_wrap?: boolean | null;
+		/**
+		* Number of text columns to wrap lines at, not counting the line-number
+		* gutter. `null` or `0` uses `editor.wrap_column`.
+		*/
+		wrap_column?: number | null;
+		/**
+		* Open in page view: centered text, hidden formatting marks, smart wrapping.
+		* `null` means off.
+		*/
+		page_view?: boolean | null;
+		/**
+		* Text width in columns in page view. `null` or `0` uses `editor.page_width`.
+		*/
+		page_width?: number | null;
+		/**
+		* Tab key inserts a tab character (e.g. for Go, Makefile). `null` uses `editor.use_tabs`.
+		*/
+		use_tabs?: boolean | null;
+		/**
+		* Spaces per tab. `null` or `0` uses `editor.tab_size`.
+		*/
+		tab_size?: number | null;
+		/**
+		* Formatter used by the Format Buffer command.
+		*/
+		formatter?: FormatterConfig | null;
+		/**
+		* Run the formatter on save.
+		*
+		* Default: `false`
+		*/
+		format_on_save?: boolean;
+		/**
+		* Commands to run on save (e.g. linters), in order; stops at the first failure.
+		* For formatting, use `formatter` + `format_on_save` instead.
+		*/
+		on_save?: OnSaveAction[];
+		/**
+		* Extra characters (besides letters, digits and `_`) that count as part of a
+		* word for word completion, e.g. `"-"` for Lisp/CSS, `"$"` for PHP/Bash, `"?!"` for Ruby.
+		*/
+		word_characters?: string | null;
+		/**
+		* Custom auto-indent rules. Unset patterns keep the built-in ones. Works
+		* without a tree-sitter grammar.
+		*/
+		indent?: IndentRulesConfig | null;
+		/**
+		* Show indentation guides. `null` follows `editor.indentation_guide`,
+		* except plain text, where guides are off unless set to `true`.
+		*/
+		indentation_guide?: boolean | null;
+	}
+	/**
+	* Default line ending format for new files
+	*
+	* Default: `"lf"`
+	*/
+type LineEndingOption = "lf" | "crlf" | "cr";
+	/**
+	* UI locale (language). Use null for auto-detection from environment.
+	*/
+type LocaleOptions = null | "bg" | "cs" | "de" | "en" | "es" | "fr" | "it" | "ja" | "ko" | "pt-BR" | "ru" | "th" | "uk" | "vi" | "zh-CN";
+	/**
+	* Language server feature, for routing features to servers when a language has
+	* several. "Merged" features combine results from all servers; "exclusive" ones use the first.
+	*/
+type LspFeature = "diagnostics" | "completion" | "code_action" | "document_symbols" | "workspace_symbols" | "hover" | "definition" | "implementation" | "references" | "format" | "rename" | "signature_help" | "inlay_hints" | "folding_range" | "semantic_tokens" | "document_highlight";
+	/**
+	* One or more LSP server configs for this language.
+	* Accepts both a single object and an array for backwards compatibility.
+	*/
+type LspLanguageConfig = LspServerConfig[];
+	/**
+	* Language server settings.
+	*/
+interface LspServerConfig {
+		/**
+		* Command that starts the server. Required when enabled.
+		*
+		* Default: `""`
+		*/
+		command?: string;
+		/**
+		* Enable this server.
+		*
+		* Default: `true`
+		*/
+		enabled?: boolean;
+		/**
+		* Display name (e.g. "tsserver"). Defaults to the command's file name.
+		*/
+		name?: string | null;
+		/**
+		* Arguments for the server. If omitted, the default server's arguments are
+		* used; any list, even `[]`, replaces them.
+		*/
+		args?: string[] | null;
+		/**
+		* Start the server when a matching file opens (default: true). When off,
+		* start it from the command palette.
+		*
+		* Default: `true`
+		*/
+		auto_start?: boolean;
+		/**
+		* Files or folders that mark the project root: the nearest folder above the
+		* file that contains one is used. Empty means `[".git"]`. With no match, the
+		* file's own folder is used.
+		*/
+		root_markers?: string[];
+		/**
+		* Extra environment variables for the server (override inherited ones).
+		*/
+		env?: Record<string, string>;
+		/**
+		* Language ID to send to the server per file extension (no dot),
+		* e.g. `{"tsx": "typescriptreact"}`.
+		*/
+		language_id_overrides?: Record<string, string>;
+		/**
+		* Server-specific `initializationOptions` sent at startup.
+		*/
+		initialization_options?: unknown;
+		/**
+		* Use this server only for these features. Don't combine with
+		* `except_features`; if neither is set, it handles everything.
+		*/
+		only_features?: LspFeature[] | null;
+		/**
+		* Use this server for everything except these features. Don't combine with
+		* `only_features`.
+		*/
+		except_features?: LspFeature[] | null;
+		/**
+		* Memory and CPU limits for the server.
+		*/
+		process_limits?: ProcessLimits;
+	}
+	/**
+	* Command to run when a file is saved (e.g. a linter).
+	*/
+interface OnSaveAction {
+		/**
+		* Shell command to run. The file path is available as $FILE.
+		*/
+		command?: string;
+		/**
+		* Arguments for the command. "$FILE" is replaced by the file path.
+		*/
+		args?: string[];
+		/**
+		* Working directory (default: project root).
+		*/
+		working_dir?: string | null;
+		/**
+		* Send the file's text on stdin.
+		*
+		* Default: `false`
+		*/
+		stdin?: boolean;
+		/**
+		* Timeout in milliseconds (default: 10000)
+		*
+		* Default: `10000`
+		*/
+		timeout_ms?: number;
+		/**
+		* Set to false to turn the action off without removing it (default: true).
+		*
+		* Default: `true`
+		*/
+		enabled?: boolean;
+	}
+	/**
+	* Package manager settings for plugins and themes.
+	*/
+interface PackagesConfig {
+		/**
+		* Git repository URLs of plugin/theme registries.
+		* Default: ["https://github.com/sinelaw/fresh-plugins-registry"]
+		*
+		* Default: `["https://github.com/sinelaw/fresh-plugins-registry"]`
+		*/
+		sources?: string[];
+	}
+	/**
+	* Settings for one plugin.
+	*/
+interface PluginConfig {
+		/**
+		* Load and run this plugin (default: true).
+		*
+		* Default: `true`
+		*/
+		enabled?: boolean;
+		/**
+		* Plugin file path. Filled in automatically; don't set it by hand.
+		*/
+		path?: string | null;
+		/**
+		* The plugin's own settings, as defined by its `<plugin_name>.schema.json`.
+		* Shown in Settings as the plugin's page under "Plugins".
+		*/
+		settings?: unknown;
+	}
+	/**
+	* Resource limits for a process.
+	*/
+interface ProcessLimits {
+		/**
+		* Max memory as a percent of system memory (default: 50). `null` means no limit.
+		*/
+		max_memory_percent?: number | null;
+		/**
+		* Max CPU as a percent, where 100 = one core, 200 = two cores. `null` means no limit.
+		*/
+		max_cpu_percent?: number | null;
+		/**
+		* Apply these limits. Default: true (the built-in config turns them on
+		* only on Linux).
+		*
+		* Default: `true`
+		*/
+		enabled?: boolean;
+	}
+	/**
+	* Starting state of the search toggles in every search UI (search/replace
+	* prompt, Live Grep, Search & Replace panel).
+	*/
+interface SearchConfig {
+		/**
+		* Match case (default: false, so `todo` also finds `TODO`). Flipping the
+		* toggle overrides this and is saved with the workspace.
+		*
+		* Default: `false`
+		*/
+		case_sensitive?: boolean;
+		/**
+		* Match whole words only (default: false).
+		*
+		* Default: `false`
+		*/
+		whole_word?: boolean;
+		/**
+		* Treat the query as a regular expression (default: false).
+		*
+		* Default: `false`
+		*/
+		regex?: boolean;
+		/**
+		* Ask before each replacement (default: false).
+		*
+		* Default: `false`
+		*/
+		confirm_each?: boolean;
+	}
+	/**
+	* How the sidebar's sections share the column.
+	*/
+type SidebarAccordion = "free" | "exclusive";
+	/**
+	* The sidebar column: the file explorer plus any plugin sections below it.
+	*/
+interface SidebarConfig {
+		/**
+		* Open sections freely (`free`, default) or one at a time (`exclusive`).
+		*
+		* Default: `"free"`
+		*/
+		accordion?: SidebarAccordion;
+	}
+	/**
+	* Which elements appear in the status bar, split into a left and a right
+	* group. Elements can be freely reordered.
+	*
+	* Example: `{"left": ["{filename}", "{cursor:compact}"], "right": ["{language}", "{encoding}"]}`
+	*/
+interface StatusBarConfig {
+		/**
+		* Elements on the left side of the status bar.
+		* Default: ["{trust}", "{remote}", "{terminal_restart}", "{cursor}", "{diagnostics}", "{cursor_count}", "{messages}"]
+		*/
+		left?: StatusBarElement[];
+		/**
+		* Elements on the right side of the status bar.
+		* Default: ["{read_only}", "{line_ending}", "{encoding}", "{language}", "{lsp}", "{warnings}", "{update}", "{palette}"]
+		*/
+		right?: StatusBarElement[];
+		/**
+		* Text drawn between status bar elements, used as-is. Each element already
+		* has a one-space margin, so `"|"` shows as `LF | UTF-8`. Empty (default) means no separator.
+		*
+		* Default: `""`
+		*/
+		separator?: string;
+	}
+	type StatusBarElement = string;
+	/**
+	* Integrated terminal settings.
+	*/
+interface TerminalConfig {
+		/**
+		* Jump back to the live terminal when new output arrives while you're in
+		* scrollback (default: true).
+		*
+		* Default: `true`
+		*/
+		jump_to_end_on_output?: boolean;
+		/**
+		* Shell for the terminal. Unset (default) uses `$SHELL` or the system default.
+		* Doesn't change `$SHELL` for other features, and doesn't apply to remote
+		* or container terminals.
+		*/
+		shell?: TerminalShellConfig | null;
+		/**
+		* Windows only: when picking a shell, skip Microsoft Store app aliases, which
+		* can crash on start. Turn off to use the first `pwsh.exe` on `PATH`.
+		* Ignored if `terminal.shell` is set. Default: true
+		*
+		* Default: `true`
+		*/
+		skip_app_execution_alias?: boolean;
+		/**
+		* When restoring Orchestrator agent sessions, resume the previous
+		* conversation (e.g. `claude --resume`) instead of starting clean. Default: true
+		*
+		* Default: `true`
+		*/
+		resume_agents?: boolean;
+		/**
+		* Dragging in a terminal selects text for Ctrl+C, switching to scrollback
+		* (Ctrl+Space returns). A click only focuses. Default: true
+		*
+		* Default: `true`
+		*/
+		mouse_drag_selects?: boolean;
+		/**
+		* When programs in the terminal get mouse events. `requested` (default):
+		* only programs that ask for the mouse (plus wheel for full-screen apps);
+		* Shift+drag still selects. `alt_screen`: every full-screen program gets all events.
+		*
+		* Default: `"requested"`
+		*/
+		mouse_forwarding?: TerminalMouseForwarding;
+		/**
+		* Close a shell's tab (and its pane, if it was the only tab) when the
+		* shell exits (`exit`, Ctrl+D) instead of keeping it as read-only
+		* scrollback. Terminals running a command (agents, plugins) are kept.
+		*
+		* Default: `false`
+		*/
+		close_on_exit?: boolean;
+		/**
+		* When the system clipboard holds no text (an image, or nothing), terminal
+		* paste sends Ctrl+V to the program instead of your last yank, so an agent
+		* CLI can read an image from the clipboard itself. Turn off to paste the
+		* yank as before. Default: true
+		*
+		* Default: `true`
+		*/
+		pass_ctrl_v_without_text?: boolean;
+	}
+	/**
+	* When programs in the terminal get mouse events.
+	*/
+type TerminalMouseForwarding = "requested" | "alt_screen";
+	/**
+	* Shell command and arguments for the terminal.
+	*/
+interface TerminalShellConfig {
+		/**
+		* Program to run (e.g. `/usr/bin/fish`, `bash`, or a script). Looked up in
+		* `$PATH` if not absolute.
+		*/
+		command?: string;
+		/**
+		* Arguments for the shell.
+		*/
+		args?: string[];
+	}
+	/**
+	* Available color themes
+	*/
+type ThemeOptions = string;
+	/**
+	* Where the cursor may move beyond the end of a line
+	*
+	* Default: `"off"`
+	*/
+type VirtualSpaceMode = "off" | "block" | "on";
+	/**
+	* Warning notification settings.
+	*/
+interface WarningsConfig {
+		/**
+		* Show a colored status-bar indicator for errors and warnings (default: true).
+		*
+		* Default: `true`
+		*/
+		show_status_indicator?: boolean;
+	}
+}
 /**
 * Main editor API interface
 */
@@ -2730,10 +5307,15 @@ interface EditorAPI {
 	getPluginApi(name: string): unknown | null;
 	/**
 	* Get the active buffer ID (0 if none)
+	* This is the buffer in the focused editor pane. Use the ID with other
+	* buffer operations such as insertText.
 	*/
 	getActiveBufferId(): number;
 	/**
 	* Get the active split ID
+	* This is the ID of the focused split pane. Use it with focusSplit,
+	* setSplitBuffer or createVirtualBufferInExistingSplit to manage split
+	* layouts.
 	*/
 	getActiveSplitId(): number;
 	/**
@@ -2743,15 +5325,27 @@ interface EditorAPI {
 	hasActiveSearch(): boolean;
 	/**
 	* List all open buffers - returns array of BufferInfo objects
+	* 
+	* @param windowId - List this window's buffers (from `listWindows()`)
+	* instead of the active window's. A buffer of a window not on screen
+	* is in no split, so its `view_mode`, `splits` and the like describe
+	* nothing visible. An unknown window has none. Such a buffer's id works
+	* with `searchBuffer`, and with `showBuffer` once its window is active;
+	* `getBufferInfo` and the other buffer reads answer for the active
+	* window's buffers only.
 	*/
-	listBuffers(): BufferInfo[];
+	listBuffers(windowId?: number): BufferInfo[];
 	/**
 	* List all available grammars with source info - returns array of GrammarInfo objects
+	* Grammars come from all sources: built-in, user-installed, language packs,
+	* bundles and plugin-registered.
+	* Each entry has `name` (use it in the config `grammar` field), `source`
+	* (where the grammar is from, e.g. "built-in" or "plugin (myplugin)") and
+	* `file_extensions` (the file extensions associated with the grammar).
 	*/
 	listGrammars(): GrammarInfoSnapshot[];
 	/**
 	* Register keys of all recorded macros in the active session, sorted.
-	* Reads the per-tick snapshot, so it never crosses the IPC boundary.
 	*/
 	listMacros(): string[];
 	/**
@@ -2773,12 +5367,53 @@ interface EditorAPI {
 	* "play macro" action). Returns true if the command was queued.
 	*/
 	playMacro(register: string): boolean;
+	/**
+	* Log a debug message from a plugin.
+	* The message goes to the editor's log file at debug level, prefixed with
+	* "Plugin:". It is written only when the log filter (RUST_LOG) allows
+	* that level. Useful for plugin development and troubleshooting.
+	* 
+	* @param msg - Debug message; include context like function name and relevant
+	* values
+	*/
 	debug(msg: string): void;
+	/**
+	* Log an info message from a plugin.
+	* The message goes to the editor's log file at info level, prefixed with
+	* "Plugin:". It is written only when the log filter (RUST_LOG) allows
+	* that level. Use for important operational messages.
+	*/
 	info(msg: string): void;
+	/**
+	* Log a warning message from a plugin.
+	* The message goes to the editor's log file at warn level, prefixed with
+	* "Plugin:". It is written only when the log filter (RUST_LOG) allows
+	* that level. Use for warnings that don't prevent operation but
+	* indicate issues.
+	*/
 	warn(msg: string): void;
+	/**
+	* Log an error message from a plugin.
+	* The message goes to the editor's log file at error level, prefixed with
+	* "Plugin:". It is written only when the log filter (RUST_LOG) allows
+	* that level. Use for critical errors that need attention.
+	*/
 	error(msg: string): void;
+	/**
+	* Display a transient message in the editor's status bar.
+	* The message stays until the next status update replaces it. An empty
+	* message clears it. Use for feedback on completed operations (e.g. "File
+	* saved", "2 matches found").
+	* 
+	* @param msg - Text to display; keep short (status bar has limited width)
+	*/
 	setStatus(msg: string): void;
 	copyToClipboard(text: string): void;
+	/**
+	* Copy text to the clipboard.
+	* Copies the text to both the internal and the system clipboard. The system
+	* copy uses OSC 52 and arboard, as enabled in the clipboard settings.
+	*/
 	setClipboard(text: string): void;
 	/**
 	* Get the display label for a keybinding by action name and optional mode.
@@ -2794,6 +5429,10 @@ interface EditorAPI {
 	* virtual mode (from `defineMode()`) matches. This is for plugin-defined
 	* contexts only (e.g. `"tour-active"`, `"review-mode"`), not built-in
 	* editor modes.
+	* 
+	* @param name - Display name shown in the command palette
+	* @param description - Description shown alongside the command
+	* @param handlerName - Name of the `globalThis` function to call
 	*/
 	registerCommand(name: string, description: string, handlerName: string, context?: string | null, options?: {
 		terminalBypass?: boolean;
@@ -2804,15 +5443,29 @@ interface EditorAPI {
 	unregisterCommand(name: string): boolean;
 	/**
 	* Set a context (for keybinding conditions)
+	* Custom contexts also control command visibility: a command registered
+	* with a context is shown only while that context is active. For example,
+	* setting "config-editor" makes the config editor commands visible.
+	* Contexts a plugin sets are cleared when the plugin unloads.
+	* 
+	* @param name - Context name (e.g. "config-editor")
+	* @param active - Whether the context is active (true = set, false = unset)
 	*/
 	setContext(name: string, active: boolean): boolean;
 	/**
 	* Execute a built-in action
+	* The action is given by name, e.g. "move_word_right" or "move_line_end".
+	* The vi mode plugin uses this to run motions. The action is queued and
+	* runs after the call returns; the result says whether it was queued.
+	* An unknown action name is only logged as a warning.
+	* 
+	* @param actionName - Action name (e.g. "move_word_right", "move_line_end")
 	*/
 	executeAction(actionName: string): boolean;
 	/**
-	* Answer a command that was dispatched with a request id (a `RunCommand`
-	* from the agent command channel).
+	* Answer a command that was dispatched with a request id: one started
+	* from outside the editor (for example by an agent driving it) whose
+	* caller waits for the command's result.
 	* 
 	* Plugins do not normally call this: the host wraps every such dispatch so
 	* that whatever the handler *returns* — or the promise it returns, once it
@@ -2847,18 +5500,26 @@ interface EditorAPI {
 	t(key: string, ...args: unknown[]): string;
 	/**
 	* Get cursor position in active buffer
+	* The position is a byte offset, not a character index. Returns 0 if there
+	* is no cursor. For multiple cursors, use `getAllCursors`.
 	*/
 	getCursorPosition(): number;
 	/**
 	* Get file path for a buffer
+	* Returns an empty string for unsaved buffers, virtual buffers, or an
+	* unknown buffer ID. Use the path to determine file type, construct related
+	* paths, or display to the user.
 	*/
 	getBufferPath(bufferId: number): string;
 	/**
 	* Get buffer length in bytes
+	* Returns 0 if the buffer doesn't exist.
 	*/
 	getBufferLength(bufferId: number): number;
 	/**
 	* Check if buffer has unsaved changes
+	* Returns false if the buffer doesn't exist. Setting a virtual buffer's
+	* content does not mark it modified.
 	*/
 	isBufferModified(bufferId: number): boolean;
 	/**
@@ -2868,10 +5529,13 @@ interface EditorAPI {
 	saveBufferToPath(bufferId: number, path: string): boolean;
 	/**
 	* Get buffer info by ID
+	* Returns null if the buffer doesn't exist.
 	*/
 	getBufferInfo(bufferId: number): BufferInfo | null;
 	/**
 	* Get primary cursor info for active buffer
+	* The result includes the cursor's selection, if any. Returns null if there
+	* is no active cursor.
 	*/
 	getPrimaryCursor(): CursorInfo | null;
 	/**
@@ -2880,6 +5544,9 @@ interface EditorAPI {
 	getAllCursors(): CursorInfo[];
 	/**
 	* Get all cursor positions as byte offsets
+	* 
+	* Returns an empty array if there are no cursors. For selection info use
+	* `getAllCursors` instead.
 	*/
 	getAllCursorPositions(): number[];
 	/**
@@ -2967,11 +5634,26 @@ interface EditorAPI {
 	*/
 	getBufferSavedDiff(bufferId: number): BufferSavedDiff | null;
 	/**
-	* Insert text at a position in a buffer
+	* Insert text at a byte position in a buffer.
+	* 
+	* The text is inserted before the byte at `position`, and all text after it
+	* shifts. The operation is asynchronous: the return value is true if the
+	* command was sent, not that the edit was applied.
+	* 
+	* @param position - Byte offset where text will be inserted (0 to buffer
+	* length, at a UTF-8 char boundary)
+	* @param text - UTF-8 text to insert
 	*/
 	insertText(bufferId: number, position: number, text: string): boolean;
 	/**
-	* Delete a range from a buffer
+	* Delete a byte range from a buffer.
+	* 
+	* Both positions must be at valid UTF-8 char boundaries. The operation is
+	* asynchronous: the return value is true if the command was sent, not that
+	* the edit was applied.
+	* 
+	* @param start - Start byte offset (inclusive)
+	* @param end - End byte offset (exclusive)
 	*/
 	deleteRange(bufferId: number, start: number, end: number): boolean;
 	/**
@@ -2982,6 +5664,11 @@ interface EditorAPI {
 	* Open a file, optionally at a specific line/column.
 	* 
 	* `editor.openFile(path)` is the whole request most of the time.
+	* 
+	* @param path - File path to open
+	* @param line - 1-based line number to jump to; omit or pass null for no jump
+	* @param column - 1-based column (a byte offset within the line) to jump to;
+	* omit or pass null for no jump
 	*/
 	openFile(path: string, line?: number | null, column?: number | null): boolean;
 	/**
@@ -2992,12 +5679,54 @@ interface EditorAPI {
 	* stashed split tree, ready to be revealed on next dive.
 	* Orchestrator uses this to populate worktree sessions with
 	* preselected files.
+	* 
+	* Pairs with `createTerminal`'s `windowId` for setting up an inactive
+	* session's contents without diving.
 	*/
 	openFileInBackground(path: string, windowId?: number): boolean;
 	/**
 	* Open a file in a specific split
+	* 
+	* @param splitId - The split ID to open the file in
+	* @param path - File path to open
+	* @param line - 1-based line number to jump to; defaults to the first line
+	* @param column - 1-based column (a byte offset within the line) to jump
+	* to; defaults to the first column
 	*/
 	openFileInSplit(splitId: number, path: string, line?: number, column?: number): boolean;
+	/**
+	* Preview a file in a specific split, as the editor's single
+	* *preview* (ephemeral) tab — what the File Explorer does on a
+	* single click, pointed at a split you name.
+	* 
+	* Use this instead of `openFileInSplit` while the user is *browsing*
+	* a list of locations — search results, references, diagnostics — and
+	* call it again as the selection moves. The previous preview is
+	* replaced rather than piling up as tabs, a file the user already had
+	* open is switched to and never demoted to a preview, and the buffer
+	* becomes a permanent tab as soon as they commit to it (open it,
+	* edit it, or move focus to another split). Focus does not move, so
+	* the panel or prompt driving the browse keeps the keys.
+	* 
+	* `line` / `column` are 1-indexed and optional. Returns `false` only
+	* when the editor can no longer take commands (for example while it
+	* shuts down); a file that cannot be previewed
+	* (unreadable, or large enough that loading it would have to ask the
+	* user about its encoding) is skipped quietly on the editor side —
+	* a browse never raises a dialog. Pair with `dismissPreview` when the
+	* browse ends without a choice.
+	*/
+	previewFileInSplit(splitId: number, path: string, line?: number, column?: number): boolean;
+	/**
+	* Drop the preview tab opened by `previewFileInSplit`, if it is still
+	* the preview — the browse ended without a choice (the user cancelled
+	* the prompt), so the split goes back to what it was showing.
+	* 
+	* A preview the user edited is kept and promoted to a permanent tab:
+	* their typing was the commitment. Safe to call when there is no
+	* preview.
+	*/
+	dismissPreview(): boolean;
 	/**
 	* Open `path` as a regular buffer in forced large-file (file-backed)
 	* mode. The file is created (empty) if missing — designed for
@@ -3025,6 +5754,8 @@ interface EditorAPI {
 	showBuffer(bufferId: number): boolean;
 	/**
 	* Close a buffer. Pass `force: true` to discard unsaved changes.
+	* 
+	* A closed buffer is removed from all splits that show it.
 	* 
 	* **A modified buffer is not closed** unless `force` is set — the user's
 	* unsaved edits are not a plugin's to throw away. A scratch buffer the
@@ -3081,11 +5812,27 @@ interface EditorAPI {
 	*/
 	cancelAnimation(id: number): boolean;
 	/**
-	* Subscribe to an editor event
+	* Subscribe to an editor event.
+	* 
+	* The handler is a function, or the name of a function on `globalThis`.
+	* Multiple handlers can be registered for the same event. Events include
+	* "after_file_save", "cursor_moved", "buffer_modified", and others.
+	* 
+	* ```ts
+	* globalThis.onSave = (data) => {
+	*   editor.setStatus(`Saved: ${data.path}`);
+	* };
+	* editor.on("after_file_save", "onSave");
+	* ```
+	* 
+	* @param eventName - Event to subscribe to
+	* @param handlerName - Name of globalThis function to call with event data
 	*/
 	on(eventName: string, handlerName: string): void;
 	/**
 	* Unsubscribe from an event
+	* 
+	* @param handlerName - Name of the handler to remove
 	*/
 	off(eventName: string, handlerName: string): void;
 	/**
@@ -3094,6 +5841,8 @@ interface EditorAPI {
 	getEnv(name: string): string | null;
 	/**
 	* Get current working directory
+	* 
+	* Use it as the base for resolving relative paths.
 	*/
 	getCwd(): string;
 	/**
@@ -3103,57 +5852,137 @@ interface EditorAPI {
 	* means a plugin-installed or SSH authority is in effect (e.g.
 	* `"Container:abc123def456"` for a devcontainer). Intended as a
 	* simple "am I already attached?" check that survives editor
-	* restarts — the label lives on the `Editor` state snapshot so it
-	* is fresh after the authority-transition restart flow.
+	* restarts: after the restart the editor goes through when the
+	* authority changes, it already reports the new label.
 	*/
 	getAuthorityLabel(): string;
 	/**
 	* Current Workspace Trust level for the active project: `"restricted"`,
-	* `"trusted"`, or `"blocked"` (empty when unavailable). Exposed to JS as
-	* `editor.workspaceTrustLevel()`. Plugins that run repo-controlled work
+	* `"trusted"`, or `"blocked"` (empty when unavailable). Plugins that run
+	* repo-controlled work
 	* should treat anything other than `"trusted"` as "do not execute".
 	*/
 	workspaceTrustLevel(): string;
 	/**
 	* Whether an environment is currently active (set via `editor.setEnv`).
-	* Exposed to JS as `editor.envActive()`. Lets the env-manager plugin
+	* Lets the env-manager plugin
 	* reflect activation and re-establish its file watch after the restart
 	* that `setEnv` triggers.
 	*/
 	envActive(): boolean;
 	/**
-	* The environment core detected in the workspace, as a JSON string
-	* (`{name, kind, snippet}`) or empty when none. Exposed to JS as
-	* `editor.detectedEnv()`. Detection lives only in core; the env-manager
+	* Whether the editor is the daemon a bare `fresh` with Auto Attach on
+	* attaches to. This reflects the launch, not the `auto_attach` preference,
+	* which stays on for `fresh FILE`. Plugins in the mode use it to
+	* override their own settings.
+	*/
+	orchestratorMode(): boolean;
+	/**
+	* Whether the editor was launched to open the files on its command line
+	* (`fresh FILE…`, as `$EDITOR` or git's `core.editor` run it, or
+	* `fresh --simple`) rather than a session (a bare `fresh`, `fresh DIR`, a
+	* daemon). Such a launch is
+	* about those files: plugins leave out what belongs to a session, such
+	* as startup pages.
+	*/
+	fileLaunch(): boolean;
+	/**
+	* The two files of a `fresh --diff LEFT RIGHT` launch, as absolute paths
+	* `[left, right]`; empty for any other launch. The editor doesn't open
+	* them: the plugin that reads this at `ready` does (the bundled
+	* `compare_files` plugin, into the panels of one tab, with a
+	* buffer-group `path` leaf).
+	*/
+	diffLaunch(): string[];
+	/**
+	* Tell the editor the files of a `fresh --diff` launch are on screen, or
+	* that they won't be (the comparison failed). Until then, or for at most
+	* a few seconds, the editor draws nothing, so the launch doesn't flash
+	* the empty editor it starts with. Call it once the view is complete,
+	* decorations and all, from the plugin that read `diffLaunch()`.
+	*/
+	diffLaunchShown(): boolean;
+	/**
+	* Whether the left dock slot is open: a panel is in it, or the host is
+	* holding the column for one its manifest declared. The plugin that
+	* fills the dock mounts it at
+	* `ready` iff this is true.
+	*/
+	dockOpen(): boolean;
+	/**
+	* The dock column's width in cells, open or not; `0` when the terminal
+	* is too narrow for a dock. Lay dock content out to this: the host owns the width and re-fits it on
+	* resize.
+	*/
+	dockCols(): number;
+	/**
+	* The environment the editor detected in the workspace, as a JSON string
+	* (`{name, kind, snippet}`) or empty when none. Detection lives only in
+	* the editor; the env-manager
 	* plugin consumes this result instead of probing the filesystem itself.
 	*/
 	detectedEnv(): string;
 	/**
 	* Join path components (variadic - accepts multiple string arguments)
 	* Always uses forward slashes for cross-platform consistency (like Node.js path.posix.join)
+	* Empty segments are skipped. If a segment is absolute, earlier segments are
+	* discarded.
 	* 
-	* Preserves up to 2 leading slashes, which matters on Windows: Rust's
-	* `Path::canonicalize` returns `\\?\`-prefixed paths, and `editor.getCwd()`
-	* surfaces that to plugin code verbatim. After the backslash→slash
+	* Preserves up to 2 leading slashes, which matters on Windows: paths the
+	* editor hands to plugins, such as `editor.getCwd()`, can carry the
+	* `\\?\` prefix (`\\?\C:\...`). After the backslash→slash
 	* normalization the prefix becomes `//?/C:/...`; collapsing the leading
 	* `//` to a single `/` yields `/?/C:/...`, which every filesystem API on
 	* Windows rejects, breaking `findConfig()`-style plugin logic.
+	* 
+	* ```ts
+	* editor.pathJoin("/home", "user", "file.txt"); // "/home/user/file.txt"
+	* editor.pathJoin("relative", "/absolute"); // "/absolute"
+	* ```
 	*/
 	pathJoin(...parts: string[]): string;
 	/**
-	* Get directory name from path
+	* Get directory name from path.
+	* 
+	* Returns the parent directory, or an empty string for a root path or a path
+	* with no parent. Does not resolve symlinks or check that the path exists.
+	* 
+	* ```ts
+	* editor.pathDirname("/home/user/file.txt"); // "/home/user"
+	* editor.pathDirname("/"); // ""
+	* ```
 	*/
 	pathDirname(path: string): string;
 	/**
-	* Get file name from path
+	* Get file name from path.
+	* 
+	* Returns the final component of the path, or an empty string for a root path.
+	* Does not strip the file extension; use `pathExtname` for that.
+	* 
+	* ```ts
+	* editor.pathBasename("/home/user/file.txt"); // "file.txt"
+	* editor.pathBasename("/home/user/"); // "user"
+	* ```
 	*/
 	pathBasename(path: string): string;
 	/**
-	* Get file extension
+	* Get file extension.
+	* 
+	* Returns the extension including the dot, or an empty string if there is
+	* none. Only the last extension is returned, so "archive.tar.gz" gives ".gz".
+	* 
+	* ```ts
+	* editor.pathExtname("file.txt"); // ".txt"
+	* editor.pathExtname("archive.tar.gz"); // ".gz"
+	* editor.pathExtname("Makefile"); // ""
+	* ```
 	*/
 	pathExtname(path: string): string;
 	/**
-	* Check if path is absolute
+	* Check if path is absolute.
+	* 
+	* On Unix, a path is absolute if it starts with "/". On Windows, it must start
+	* with a drive letter and separator (such as `C:\`) or be a UNC path.
 	*/
 	pathIsAbsolute(path: string): boolean;
 	/**
@@ -3179,8 +6008,8 @@ interface EditorAPI {
 	*/
 	utf8ByteLength(text: string): number;
 	/**
-	* Line-level diff of two texts (native patience diff; see
-	* `fresh_core::diff`). Returns hunks of differing line ranges in
+	* Line-level diff of two texts, using the patience diff algorithm.
+	* Returns hunks of differing line ranges in
 	* increasing order; equal regions are not reported. Lines are
 	* 0-indexed `\n`-terminated segments (a final unterminated segment
 	* counts as a line), matching the `text.split("\n")`-and-drop-
@@ -3188,26 +6017,60 @@ interface EditorAPI {
 	* 
 	* Never refuses an input: pathological chunks degrade to coarser
 	* hunks instead of failing, so callers don't need a "diff too
-	* large" path. Runs synchronously on the plugin thread — cost is
-	* near-linear in input size, far below the JS it replaces.
+	* large" path. The call is synchronous and returns the hunks directly;
+	* its cost is near-linear in input size.
 	*/
 	computeLineDiff(oldText: string, newText: string): LineDiffHunk[];
 	/**
 	* Check if a file exists on the path's filesystem (a window's authority,
 	* or the local host for a `LocalPath`).
+	* 
+	* The path may be a file or a directory. Use `fileStat` for more detailed
+	* information.
 	*/
 	fileExists(path: string | LocalPath | WindowPath | AuthorityPath): boolean;
 	/**
 	* Read file contents from the path's filesystem.
+	* 
+	* The file is read as a UTF-8 string. Returns `null` if the file does not
+	* exist, cannot be read, or is not valid UTF-8, so binary files cannot be
+	* read this way.
 	*/
 	readFile(path: string | LocalPath | WindowPath | AuthorityPath): string | null;
 	/**
-	* Write file contents to the path's filesystem. Parent directories are
-	* created as needed.
+	* Write file contents to a NEW file on the path's filesystem. Parent
+	* directories are created as needed. Returns false if the path already
+	* exists — use `replaceFile` to replace a file deliberately.
+	* 
+	* @param content - UTF-8 string to write
 	*/
 	writeFile(path: string | LocalPath | WindowPath | AuthorityPath, content: string): boolean;
 	/**
+	* Write to a file, replacing it if it already exists.
+	* 
+	* `writeFile` refuses an existing path, which is what its documentation
+	* always promised and what stops a plugin destroying a user's file by
+	* accident. Use this when replacing the file is the actual intent — a
+	* plugin rewriting its own cache or state, or re-exporting a report the
+	* user asked for again. The write is atomic: the content goes to a temp
+	* file which is renamed over the destination, so a reader sees either the
+	* old file or the new one, never a partial one.
+	*/
+	replaceFile(path: string | LocalPath | WindowPath | AuthorityPath, content: string): boolean;
+	/**
 	* Read directory contents (returns array of {name, is_file, is_dir})
+	* 
+	* Entries are in no particular order. Entry names are relative to the
+	* directory; use `pathJoin` to build full paths. Returns an empty array if
+	* the path cannot be read, for example when it is not a directory or
+	* permission is denied.
+	* 
+	* ```ts
+	* const entries = editor.readDir("/home/user");
+	* for (const e of entries) {
+	*   const fullPath = editor.pathJoin("/home/user", e.name);
+	* }
+	* ```
 	*/
 	readDir(path: string | LocalPath | WindowPath | AuthorityPath): DirEntry[];
 	/**
@@ -3217,21 +6080,90 @@ interface EditorAPI {
 	*/
 	createDir(path: string | LocalPath | WindowPath | AuthorityPath): boolean;
 	/**
-	* Permanently remove a file or directory on the path's filesystem
-	* (recursively for directories). For safety, the path must be under the OS
-	* temp directory or the Fresh config directory. Returns true on success.
+	* Create an editor-owned staging directory and return the opaque token
+	* that names it. Write into it with the path `scratchPath` returns, then
+	* either publish it with `installScratch` or drop it with
+	* `scratchDiscard`. `label` only makes the directory recognisable to a
+	* human; it does not decide where the directory goes.
 	*/
-	removePath(path: string | LocalPath | WindowPath | AuthorityPath): boolean;
+	scratchCreate(label: string): string | null;
 	/**
-	* Rename/move a file or directory. Both paths must target the same
-	* filesystem (a cross-backend move is rejected). Returns true on success.
+	* The directory a staging token names, or `null` if the token is unknown
+	* or already spent.
 	*/
-	renamePath(from: string | LocalPath | WindowPath | AuthorityPath, to: string | LocalPath | WindowPath | AuthorityPath): boolean;
+	scratchPath(token: string): string | null;
 	/**
-	* Copy a file or directory recursively to a new location. Both paths must
-	* target the same filesystem. Returns true on success.
+	* Discard a staging directory. The path is looked up from the token, so
+	* an unknown, forged or already-spent token removes nothing.
 	*/
-	copyPath(from: string | LocalPath | WindowPath | AuthorityPath, to: string | LocalPath | WindowPath | AuthorityPath): boolean;
+	scratchDiscard(token: string): boolean;
+	/**
+	* Publish a staging directory as the installed package `<kind>/<name>`,
+	* where `kind` is one of `plugin`, `theme`, `language` or `bundle`. Any
+	* existing install under that name is moved aside, the new package is put
+	* in its place, and only then does the old one go to the system trash, so an
+	* upgrade is recoverable. If the new package cannot be put in place, the old
+	* install is put back, so a failed upgrade never leaves the user without a
+	* package.
+	* 
+	* `subpath` installs one directory out of the staging tree (a package in
+	* a subdirectory of a cloned monorepo); pass `""` for the whole thing. It
+	* chooses the source only — `kind` and `name` decide where the package
+	* lands. Installing the whole tree spends the token; installing a subpath
+	* leaves it live so the rest can be discarded.
+	* 
+	* @param name - Package name; must be a single path component
+	*/
+	installScratch(token: string, kind: string, name: string, subpath: string): boolean;
+	/**
+	* Create a staging directory holding a copy of `from`, and return the
+	* token that names it — how a package installed from a local directory
+	* reaches staging.
+	* 
+	* `from` is a path on the editor host. Staging directories, installed
+	* packages and plugin state all live there by design, so an install
+	* survives the SSH session that started it going away; there is no
+	* authority-path form of this call, so the argument is a plain path
+	* rather than a `LocalPath | WindowPath | AuthorityPath` union with two
+	* thirds of it rejected at runtime.
+	* 
+	* The copy can only land in the new staging directory, never on anything
+	* else. Symlinks are recreated as symlinks rather than followed; where the
+	* platform does not allow creating one, the target's contents are copied.
+	* 
+	* Answers `null` if `from` is not a directory or could not be copied,
+	* having discarded anything it had already staged — so there is never a
+	* half-filled staging directory to clean up.
+	*/
+	scratchFromDirectory(from: string): string | null;
+	/**
+	* Move an installed package to the system trash. Returns false if nothing
+	* is installed under that kind and name.
+	*/
+	uninstallPackage(kind: string, name: string): boolean;
+	/**
+	* Write a namespaced state entry, replacing any previous value. The
+	* editor owns the on-disk layout; a plugin names the entry, not the file.
+	* 
+	* Writes are atomic. `namespace` and `key` must each be a single path
+	* component, and a key may not be empty or start with a dot; otherwise
+	* nothing is written and false is returned. Use this instead of
+	* hand-rolling a temp-file-and-rename dance in a directory of your own.
+	*/
+	stateSet(namespace: string, key: string, value: string): boolean;
+	/**
+	* Read a namespaced state entry, or `null` if it is unset.
+	*/
+	stateGet(namespace: string, key: string): string | null;
+	/**
+	* The keys set in a namespace, in no particular order.
+	*/
+	stateKeys(namespace: string): string[];
+	/**
+	* Clear a namespaced state entry. Returns true if it is gone afterwards,
+	* including when it was already unset.
+	*/
+	stateDelete(namespace: string, key: string): boolean;
 	/**
 	* Construct a `LocalPath` — a path that always resolves on the local
 	* editor host, regardless of the active window's authority. Use for
@@ -3268,16 +6200,22 @@ interface EditorAPI {
 	/**
 	* Get current config as JS object.
 	* 
-	* The snapshot holds an `Arc<serde_json::Value>` that was serialized
-	* on the editor side the last time the underlying `Arc<Config>`
-	* changed. Cloning the Arc inside the read lock is a refcount bump;
-	* the actual walk into the JS runtime happens outside the lock.
+	* This is the merged configuration (user config file plus compiled-in
+	* defaults) that the editor is actually using, including all default values
+	* for LSP servers, languages, keybindings and so on. Use `getUserConfig` for
+	* the user's config file alone.
 	*/
-	getConfig(): unknown;
+	getConfig(): FreshConfig;
 	/**
-	* Get user config as JS object. Same Arc-clone pattern as `get_config`.
+	* Get user config as JS object.
+	* 
+	* Returns only the values explicitly set in the config file, not defaults.
+	* The file read is the first that exists: a `config.json` in the working
+	* directory, otherwise the user's config file. Fields not present here use
+	* their default values. Use this with `getConfig()` to tell which values are
+	* defaults.
 	*/
-	getUserConfig(): unknown;
+	getUserConfig(): FreshConfig;
 	/**
 	* Declare a boolean config field for the calling plugin.
 	* 
@@ -3338,6 +6276,10 @@ interface EditorAPI {
 	getPluginConfig(): unknown;
 	/**
 	* Reload configuration from file
+	* 
+	* After a plugin saves config changes to the config file, call this to reload
+	* the editor's in-memory configuration. This keeps the editor and plugins in
+	* sync with the saved config.
 	*/
 	reloadConfig(): void;
 	/**
@@ -3355,6 +6297,25 @@ interface EditorAPI {
 	* editor processes the command.
 	*/
 	setSetting(path: string, value: unknown): boolean;
+	/**
+	* Persist a single core config setting to the user's config file.
+	* 
+	* The durable counterpart to `setSetting`: `setSetting` patches the
+	* running editor and is gone at exit, this writes `config.json` the way
+	* the Settings UI does (same layer resolution, same comment-preserving
+	* rewrite) *and* applies the value immediately, so a checkbox a plugin
+	* draws can own a real setting.
+	* 
+	* `path` is dot-separated (e.g. `"auto_attach"`,
+	* `"editor.tab_size"`). The host refuses a path that is not a real
+	* config setting rather than writing a key that would be silently
+	* dropped on the next load, and says so in the status bar.
+	* 
+	* Returns `true` if the write was queued; it is applied asynchronously,
+	* so a following `getConfig()` reflects it only after the editor
+	* processes the command.
+	*/
+	saveSetting(path: string, value: unknown): boolean;
 	/**
 	* Reload theme registry from disk
 	* Call this after installing theme packages or saving new themes
@@ -3390,21 +6351,32 @@ interface EditorAPI {
 	getPluginDir(): string;
 	/**
 	* Get config directory path
+	* 
+	* Returns the absolute path to the user config directory (e.g.
+	* `~/.config/fresh/` on Linux).
 	*/
 	getConfigDir(): string;
 	/**
-	* Get the persistent data directory path (DirectoryContext::data_dir).
-	* Intended for plugin state that should outlive a single session — e.g.
+	* Get the path of the editor's persistent data directory (e.g.
+	* `~/.local/share/fresh` on Linux). Intended for plugin state that should outlive a single session — e.g.
 	* review-diff comments keyed off git state.
 	*/
 	getDataDir(): string;
 	/**
+	* The user's home directory as the editor resolved it, or `""` when it
+	* has none. A plugin reading a dotfile asks here rather than reading
+	* `$HOME`, which no test can redirect per-editor.
+	*/
+	getHomeDir(): string;
+	/**
 	* Directory holding terminal scrollback backing files for the current
 	* working directory. Each project root / worktree has its own subdir, so
-	* Universal Search's terminal scope can stay scoped to the active
-	* project rather than spanning every project's terminals.
+	* Universal Search's terminal scope can stay scoped to one project.
+	* 
+	* @param windowId - The directory of this window's root instead (from
+	* `listWindows()`); `""` for an unknown window.
 	*/
-	getTerminalDir(): string;
+	getTerminalDir(windowId?: number): string;
 	/**
 	* Per-working-directory data root for plugin state scoped to the current
 	* project root / worktree (`<data_dir>/workdirs/<encoded-cwd>/`). Use
@@ -3415,10 +6387,19 @@ interface EditorAPI {
 	getWorkingDataDir(): string;
 	/**
 	* Get themes directory path
+	* 
+	* Returns the absolute path to the directory where user themes are stored
+	* (e.g. `~/.config/fresh/themes/`).
 	*/
 	getThemesDir(): string;
 	/**
 	* Apply a theme by name
+	* 
+	* Loads and applies the theme immediately. The theme can be a built-in theme
+	* name or a custom theme from the themes directory.
+	* 
+	* @param themeName - Name of the theme to apply (e.g. "dark", "light",
+	* "my-custom-theme")
 	*/
 	applyTheme(themeName: string): boolean;
 	/**
@@ -3434,6 +6415,11 @@ interface EditorAPI {
 	overrideThemeColors(overrides: unknown): boolean;
 	/**
 	* Get theme schema as JS object
+	* 
+	* Returns the raw JSON Schema for theme files, for use by the theme
+	* editor. The schema uses standard JSON Schema format with `$ref`
+	* for type references. Plugins must parse the schema and resolve `$ref`
+	* references themselves.
 	*/
 	getThemeSchema(): unknown;
 	/**
@@ -3447,6 +6433,11 @@ interface EditorAPI {
 	getAllThemes(): unknown;
 	/**
 	* Delete a custom theme (alias for deleteThemeSync)
+	* 
+	* Only deletes files from the user's themes directory, so a plugin cannot
+	* delete arbitrary files.
+	* 
+	* @param name - Theme name (without the .json extension)
 	*/
 	deleteTheme(name: string): boolean;
 	/**
@@ -3463,14 +6454,28 @@ interface EditorAPI {
 	themeFileExists(name: string): boolean;
 	/**
 	* Get file stat information
+	* 
+	* Follows symlinks. Returns `null` for a path that does not exist rather than
+	* throwing. Otherwise returns `{ isFile, isDir, size, readonly }`, with `size`
+	* in bytes.
 	*/
 	fileStat(path: string | LocalPath | WindowPath | AuthorityPath): unknown;
 	/**
-	* Check if a background process is still running
+	* Check if a background process is still running: true from
+	* `spawnBackgroundProcess` until its result promise settles or it is
+	* killed.
+	* 
+	* @param processId - ID returned from spawnBackgroundProcess
 	*/
 	isProcessRunning(processId: number): boolean;
 	/**
 	* Kill a process by ID (alias for killBackgroundProcess)
+	* 
+	* Forcibly terminates the process (SIGKILL on Unix). Its
+	* `spawnBackgroundProcess` promise then settles with `exit_code` -1. Returns
+	* true once the kill request has been sent.
+	* 
+	* @param processId - `processId` of a spawnBackgroundProcess handle
 	*/
 	killProcess(processId: number): boolean;
 	/**
@@ -3497,8 +6502,8 @@ interface EditorAPI {
 	* 
 	* ```js
 	* editor.setLineTargets(bufferId, [
-	* { line: 0, path: "src/main.rs", target: 41, into: "code" },
-	* { line: 1, path: "src/lib.rs",  target: 12, into: "code" },
+	*   { line: 0, path: "src/main.rs", target: 41, into: "code" },
+	*   { line: 1, path: "src/lib.rs",  target: 12, into: "code" },
 	* ]);
 	* ```
 	* 
@@ -3525,8 +6530,9 @@ interface EditorAPI {
 	* in one read, instead of stitching `listSplits` + `getBufferInfo` +
 	* `getActiveSplitId` together and still not knowing pane order.
 	* 
-	* Reads the snapshot, so it is cheap and synchronous — but it
-	* observes the state as of the last applied batch. After a mutation,
+	* It reads the editor's cached state, so it is cheap and synchronous —
+	* but that state only reflects changes the editor has already applied.
+	* After a mutation,
 	* `await editor.flush()` first (or await the mutation itself, if it
 	* returns a promise) or this reports what was true before it.
 	* 
@@ -3546,8 +6552,8 @@ interface EditorAPI {
 	* the new pane lands on — `"before"` is left/top, `"after"` (the
 	* default, and what the keyboard split does) is right/bottom.
 	* 
-	* Resolves *after* the layout has been applied and the readable
-	* snapshot refreshed, with the new pane's id and geometry — so
+	* Resolves *after* the layout has been applied and the editor's cached
+	* state refreshed, with the new pane's id and geometry — so
 	* `listSplits()` / `describeWorkspace()` called next observe the split
 	* that was just made, and "did it land on the left" is answered by the
 	* `x` that comes back rather than by guessing.
@@ -3564,8 +6570,9 @@ interface EditorAPI {
 	/**
 	* Wait for every mutation queued so far to be applied, then resolve.
 	* 
-	* Commands are queued and drained on the editor thread, so a read
-	* issued right after a mutation reports the state from *before* it:
+	* Mutating calls are queued and the editor applies them after the call
+	* returns, so a read issued right after a mutation reports the state
+	* from *before* it:
 	* `setSplitRatio(...)` followed by `listSplits()` returns the old
 	* widths. Awaiting this closes that window, which is what lets a
 	* single script change the layout and then verify what it changed.
@@ -3580,16 +6587,38 @@ interface EditorAPI {
 	/**
 	* Create a composite buffer (async)
 	* 
-	* Uses typed CreateCompositeBufferOptions - serde validates field names at runtime
-	* via `deny_unknown_fields` attribute
+	* A composite buffer displays several source buffers in a single tab/view area
+	* with a custom layout (side-by-side, stacked or unified). This is useful for
+	* diff views, merge conflict resolution, etc.
+	* 
+	* The options are checked when the call is made; options that don't
+	* match the type (for example a misspelled field name) make the call
+	* throw.
+	* 
+	* @param opts - Configuration for the composite buffer
 	*/
 	createCompositeBuffer(opts: TsCreateCompositeBufferOptions): Promise<number>;
 	/**
 	* Update alignment hunks for a composite buffer
 	* 
-	* Uses typed Vec<CompositeHunk> - serde validates field names at runtime
+	* The hunks are checked when the call is made; a hunk that doesn't match
+	* the type (for example one with a misspelled field name) makes the call
+	* throw.
+	* 
+	* @param bufferId - The composite buffer ID
+	* @param hunks - New diff hunks for alignment
 	*/
 	updateCompositeAlignment(bufferId: number, hunks: TsCompositeHunk[]): boolean;
+	/**
+	* Say where a buffer this plugin composed carries code, and in what
+	* language, so the host highlights it. Replaces the buffer's
+	* previous regions; setting the buffer's content clears them.
+	* 
+	* The regions are checked when the call is made; a region that doesn't
+	* match the type (for example one with a misspelled field name) makes the
+	* call throw.
+	*/
+	setSyntaxRegions(bufferId: number, regions: TsSyntaxRegion[]): boolean;
 	/**
 	* Close a composite buffer
 	*/
@@ -3642,12 +6671,36 @@ interface EditorAPI {
 	* Example usage in TypeScript:
 	* ```typescript
 	* editor.addOverlay(bufferId, "my-namespace", 0, 10, {
-	* fg: "syntax.keyword",           // theme key
-	* bg: [40, 40, 50],               // RGB array
-	* bold: true,
-	* strikethrough: true,
+	* Add an overlay with styling options
+	* 
+	* Colors can be specified as RGB arrays `[r, g, b]` or theme key strings.
+	* Theme keys are resolved at render time, so overlays update with theme changes.
+	* 
+	* Theme key examples: "ui.status_bar_fg", "editor.selection_bg", "syntax.keyword"
+	* 
+	* Options: fg, bg (RGB array or theme key string), bold, italic, underline,
+	* strikethrough, extendToLineEnd (all booleans, default false).
+	* `composeOnly: true` draws the overlay only in a pane showing the buffer
+	* in compose view, and hides it in every other pane.
+	* 
+	* Overlays persist until removed. Use a namespace (e.g. "spell", "todo") to
+	* remove a group at once with `clearNamespace`. Several overlays can cover the
+	* same range.
+	* 
+	* Example usage in TypeScript:
+	* ```ts
+	* editor.addOverlay(bufferId, "my-namespace", 0, 10, {
+	*   fg: "syntax.keyword",           // theme key
+	*   bg: [40, 40, 50],               // RGB array
+	*   bold: true,
+	*   strikethrough: true,
 	* });
 	* ```
+	* 
+	* @param bufferId - Target buffer ID
+	* @param namespace - Namespace for grouping (use clearNamespace for batch removal)
+	* @param start - Start byte offset
+	* @param end - End byte offset
 	*/
 	addOverlay(bufferId: number, namespace: string, start: number, end: number, options: Record<string, unknown>): boolean;
 	/**
@@ -3664,8 +6717,8 @@ interface EditorAPI {
 	* 
 	* ```typescript
 	* editor.setCursorLineOverlay(bufferId, {
-	* bg: "editor.selection_bg",
-	* extendToLineEnd: true,
+	*   bg: "editor.selection_bg",
+	*   extendToLineEnd: true,
 	* });
 	* ```
 	*/
@@ -3680,6 +6733,9 @@ interface EditorAPI {
 	clearAllOverlays(bufferId: number): boolean;
 	/**
 	* Clear all overlays that overlap with a byte range
+	* 
+	* @param start - Start byte position (inclusive)
+	* @param end - End byte position (exclusive)
 	*/
 	clearOverlaysInRange(bufferId: number, start: number, end: number): boolean;
 	/**
@@ -3700,8 +6756,13 @@ interface EditorAPI {
 	* cursor-revealable decoration once — instead of rebuilding markers
 	* on every cursor move — is what keeps cursor movement free of
 	* marker churn (and of the cache invalidation it causes).
+	* 
+	* `composeOnly` set to `true` applies the conceal only in a pane showing
+	* the buffer in compose view; every other pane shows the text as is.
+	* Pass `null` for `activation` and the scope to leave the conceal
+	* always active.
 	*/
-	addConceal(bufferId: number, namespace: string, start: number, end: number, replacement: string | null, activation?: string, scopeStart?: number, scopeEnd?: number): boolean;
+	addConceal(bufferId: number, namespace: string, start: number, end: number, replacement: string | null, activation?: string | null, scopeStart?: number | null, scopeEnd?: number | null, composeOnly?: boolean): boolean;
 	/**
 	* Clear all conceal ranges in a namespace
 	*/
@@ -3781,26 +6842,69 @@ interface EditorAPI {
 	/**
 	* Set layout hints (compose width, column guides) for a buffer/split
 	* directly.
+	* 
+	* @param splitId - The pane to set them in; omitted or `null`, the pane
+	* the user is in (inside a buffer group, its focused panel).
 	*/
 	setLayoutHints(bufferId: number, splitId: number | null, hints: LayoutHints): boolean;
 	/**
 	* Set file explorer decorations for a namespace
+	* 
+	* Namespaces are isolated per plugin at runtime, so different plugins may
+	* safely reuse the same namespace label without clearing each other's
+	* explorer state.
+	* 
+	* @param namespace - Namespace for grouping (e.g., "git-status")
+	* @param decorations - Decoration entries (`FileExplorerDecoration` objects:
+	* `path`, `symbol`, `color` as an RGB array or theme key, optional `priority`)
 	*/
 	setFileExplorerDecorations(namespace: string, decorations: Record<string, unknown>[]): boolean;
 	/**
 	* Clear file explorer decorations for a namespace
+	* 
+	* @param namespace - Namespace to clear (e.g., "git-status")
 	*/
 	clearFileExplorerDecorations(namespace: string): boolean;
 	/**
 	* Set file explorer slot overrides for a namespace
+	* 
+	* Each entry can override the leading icon, trailing badge, and/or name color
+	* for a path. Unset fields fall back to the editor default: no leading icon,
+	* and the badge and name color that file explorer decorations produce. Use
+	* `suppressLeading`, `suppressTrailing`, or `suppressNameColor` to explicitly
+	* clear a slot instead of replacing it.
+	* 
+	* Example (git-style name coloring):
+	* 
+	* ```ts
+	* editor.setFileExplorerSlots("git-status", [{
+	*   path: "/project/src/main.rs",
+	*   nameColor: "ui.syntax.string",
+	*   priority: 10,
+	* }]);
+	* ```
+	* 
+	* @param namespace - Namespace for grouping (e.g., "git-status")
+	* @param slots - Slot override entries (`FileExplorerSlotEntry` objects)
 	*/
 	setFileExplorerSlots(namespace: string, slots: Record<string, unknown>[]): boolean;
 	/**
 	* Clear file explorer slot overrides for a namespace
+	* 
+	* @param namespace - Namespace to clear (e.g., "git-status")
 	*/
 	clearFileExplorerSlots(namespace: string): boolean;
 	/**
 	* Add virtual text (inline text that doesn't exist in the buffer)
+	* 
+	* @param virtualTextId - Unique identifier for this virtual text
+	* @param position - Byte position to insert at
+	* @param r - Red color component (0-255)
+	* @param g - Green color component (0-255)
+	* @param b - Blue color component (0-255)
+	* @param before - Whether to insert before (true) or after (false) the position
+	* @param useBg - Whether to use the color as background (true) or foreground
+	* (false)
 	*/
 	addVirtualText(bufferId: number, virtualTextId: string, position: number, text: string, r: number, g: number, b: number, before: boolean, useBg: boolean): boolean;
 	/**
@@ -3813,6 +6917,18 @@ interface EditorAPI {
 	* be RGB arrays or theme-key strings, plus `bold`/`italic`. Theme
 	* keys are resolved at render time so the label follows theme
 	* changes live.
+	* 
+	* `options.padToColumn` (number) pads the text so it *ends* at that
+	* column of the row, instead of the usual single space of inlay
+	* padding — use it for decoration that has to hold a column, such as
+	* the right edge of a box drawn around a block. The padding is
+	* measured as the row is laid out, so it holds the column even for
+	* the frames between an edit and the `lines_changed` that reports it;
+	* a width you compute here cannot, since your view of the buffer
+	* always trails the one being drawn.
+	* 
+	* `options.composeOnly: true` draws the text only in a pane showing the
+	* buffer in compose view, and hides it in every other pane.
 	*/
 	addVirtualTextStyled(bufferId: number, virtualTextId: string, position: number, text: string, options: Record<string, unknown>, before: boolean): boolean;
 	/**
@@ -3825,6 +6941,8 @@ interface EditorAPI {
 	clearVirtualTexts(bufferId: number): boolean;
 	/**
 	* Clear all virtual texts in a namespace
+	* 
+	* @param namespace - The namespace to clear (e.g., "git-blame")
 	*/
 	clearVirtualTextNamespace(bufferId: number, namespace: string): boolean;
 	/**
@@ -3844,22 +6962,33 @@ interface EditorAPI {
 	* Add a virtual line (full line above/below a position)
 	* 
 	* The `options` object accepts:
-	* * `fg`, `bg` — either an `[r, g, b]` array (each `0..=255`) or a
-	* theme-key string (e.g. `"editor.line_number_fg"`).  Theme keys
-	* are resolved at render time so the line follows theme changes.
-	* Both default to `null` (no foreground / transparent background).
-	* * `gutterGlyph` — optional single character (any short string)
-	* rendered in the line-number column on this virtual line's
-	* first visual row. Use to mark e.g. a deletion line with "-"
-	* so the indicator sits next to the deleted content instead
-	* of on the following source line.
-	* * `gutterColor` — color for `gutterGlyph`, same shape as
-	* `fg`/`bg`. Falls back to the theme's line-number fg.
+	*   * `fg`, `bg` — either an `[r, g, b]` array (each `0..=255`) or a
+	*     theme-key string (e.g. `"editor.line_number_fg"`).  Theme keys
+	*     are resolved at render time so the line follows theme changes.
+	*     Both default to `null` (no foreground / transparent background).
+	*   * `gutterGlyph` — optional single character (any short string)
+	*     rendered in the line-number column on this virtual line's
+	*     first visual row. Use to mark e.g. a deletion line with "-"
+	*     so the indicator sits next to the deleted content instead
+	*     of on the following source line.
+	*   * `gutterColor` — color for `gutterGlyph`, same shape as
+	*     `fg`/`bg`. Falls back to the theme's line-number fg.
+	*   * `composeOnly` — `true` draws the line only in a pane showing the
+	*     buffer in compose view, and hides it in every other pane.
+	* 
+	* @param position - Byte position to anchor the virtual line to
+	* @param above - Whether to insert above (true) or below (false) the line
+	* @param namespace - Namespace for bulk removal (e.g., "git-blame")
+	* @param priority - Priority for ordering multiple lines at the same position
+	* (higher comes later)
 	*/
 	addVirtualLine(bufferId: number, position: number, text: string, options: Record<string, unknown>, above: boolean, namespace: string, priority: number): boolean;
 	/**
 	* Show a prompt and wait for user input (async)
 	* Returns the user input or null if cancelled
+	* 
+	* @param label - Text shown before the input
+	* @param initialValue - Text already in the input when it opens
 	*/
 	prompt(label: string, initialValue: string): Promise<string | null>;
 	/**
@@ -3878,6 +7007,8 @@ interface EditorAPI {
 	* the config's dotfile visibility for this pick — pass `true` when
 	* the file being picked is itself a dotfile (a tour manifest, an
 	* editorconfig), which the default would hide.
+	* 
+	* @param label - Text shown before the input
 	*/
 	pickFile(label: string, directory?: string | null, showHidden?: boolean | null): Promise<string | null>;
 	/**
@@ -3888,6 +7019,9 @@ interface EditorAPI {
 	* the bottom minibuffer row (issue #1796 — Live Grep). The flag
 	* is rendering-only; confirm/cancel/hooks behave identically to a
 	* non-overlay prompt of the same `promptType`.
+	* 
+	* @param label - Label to display (e.g., "Git grep: ")
+	* @param promptType - Type identifier (e.g., "git-grep")
 	*/
 	startPrompt(label: string, promptType: string, floatingOverlay?: boolean): boolean;
 	/**
@@ -3920,17 +7054,31 @@ interface EditorAPI {
 	* 
 	* For lossless capture against fast typing or paste, wrap the
 	* loop with `beginKeyCapture()` / `endKeyCapture()`.
+	* 
+	* `KeyEventPayload` has `key` (e.g. `"a"`, `"escape"`, `"f1"`) and the
+	* modifier flags `ctrl`, `alt`, `shift` and `meta`.
 	*/
 	getNextKey(): Promise<KeyEventPayload>;
 	/**
 	* Start a prompt with initial value. See `startPrompt` for the
 	* meaning of `floatingOverlay`.
+	* 
+	* @param label - Label to display (e.g., "Git grep: ")
+	* @param promptType - Type identifier (e.g., "git-grep")
+	* @param initialValue - Initial text to pre-fill in the prompt
 	*/
 	startPromptWithInitial(label: string, promptType: string, initialValue: string, floatingOverlay?: boolean): boolean;
 	/**
 	* Set suggestions for the current prompt
 	* 
-	* Uses typed Vec<Suggestion> - serde validates field names at runtime
+	* The suggestions are checked when the call is made; a suggestion that
+	* doesn't match the type (for example one with a misspelled field name)
+	* makes the call throw.
+	* 
+	* Every suggestion's `id` must be unique in the array; a list that repeats one
+	* throws instead of being shown.
+	* 
+	* @param suggestions - Array of suggestions to display
 	*/
 	setPromptSuggestions(suggestions: PromptSuggestion[], selectedIndex?: number | null): boolean;
 	setPromptInputSync(sync: boolean): boolean;
@@ -3944,6 +7092,8 @@ interface EditorAPI {
 	* an empty array to clear the title and fall back to the
 	* prompt-type default. Has no visible effect on non-overlay
 	* prompts.
+	* 
+	* @param title - Styled segments rendered along the overlay's top toolbar row
 	*/
 	setPromptTitle(title: StyledText[]): boolean;
 	/**
@@ -3952,8 +7102,19 @@ interface EditorAPI {
 	* (Orchestrator's `[n] new   [d] dive   [Esc] close` row).
 	* Empty array clears the footer. Has no visible effect on
 	* non-overlay prompts.
+	* 
+	* @param footer - Styled segments rendered along the overlay's bottom row
 	*/
 	setPromptFooter(footer: StyledText[]): boolean;
+	/**
+	* Centre the floating-overlay prompt's card on the whole frame — 90%
+	* of it, over the dock and sidebar, as the Settings dialog is — instead
+	* of on the chrome area beside the dock. `false` puts it back. Has no
+	* visible effect on non-overlay prompts.
+	* 
+	* Live Grep uses it so its results, preview and toolbar get the room.
+	*/
+	setPromptFullscreen(fullscreen: boolean): boolean;
 	/**
 	* Set the floating-overlay prompt's input-row status text (right-aligned,
 	* left of the match count). Empty string clears it.
@@ -3984,18 +7145,84 @@ interface EditorAPI {
 	setPromptSelectedIndex(index: number): boolean;
 	/**
 	* Define a buffer mode (takes bindings as array of [key, command] pairs)
+	* 
+	* On a widget panel whose keymap is this mode, **the focused control
+	* handles a key first** — a field types and moves its caret, an open
+	* list takes the arrows and Enter, a button takes Enter and Space, Esc
+	* closes a pop-up before the dialog — and a binding gets only the keys
+	* the control does not use. Bind commands ("submit", "close"), not the
+	* controls' own keys.
+	* 
+	* A binding whose third element is `"shortcut"` —
+	* `["C-Enter", "submit", "shortcut"]` — is a **dialog-wide shortcut**
+	* instead: it runs ahead of any control, wherever focus is. Keep that
+	* list short and made of chords no control uses.
+	* 
+	* A binding whose third element is `"on:a,b"` —
+	* `["Up", "history_prev", "on:name,cmd"]` — belongs to the controls
+	* named: it applies only while one of those widgets holds the panel's
+	* focus, and on any other control the key is left to the panel's
+	* defaults (↑/↓ move focus to the control above or below). Use it for a
+	* command that is about one field, rather than binding the key for the
+	* whole dialog and forwarding it back.
+	* 
+	* Example:
+	* 
+	* ```ts
+	* editor.defineMode("diagnostics-list", [
+	*   ["Return", "diagnostics_goto"],
+	*   ["q", "close_buffer"],
+	* ], true);
+	* ```
+	* 
+	* @param name - Mode name (e.g., "diagnostics-list")
+	* @param bindingsArr - Array of [key_string, command_name] pairs
+	* @param readOnly - Whether buffers in this mode are read-only
 	*/
 	defineMode(name: string, bindingsArr: string[][], readOnly?: boolean, allowTextInput?: boolean, inheritNormalBindings?: boolean): boolean;
 	/**
-	* Set the global editor mode
+	* Set the active window's editor mode — a plugin mode scoped to that
+	* window, such as `markdown-source`. It outranks the editor-wide input
+	* mode in that window and is invisible in every other. `null` clears
+	* it. A modal-editing personality that should apply everywhere (vi)
+	* belongs in `setInputMode` instead.
 	*/
 	setEditorMode(mode: string | null): boolean;
 	/**
-	* Get the current editor mode
+	* Set the editor-wide input mode — a modal-editing personality such as
+	* vi (`"vi-normal"`, `"vi-insert"`, …). It applies in every window,
+	* including windows created later, and nothing window-scoped clears it.
+	* Keys resolve against a focused panel's mode, then the buffer's, then
+	* the window's editor mode, then this, then the base keymap. `null`
+	* turns it off.
+	* 
+	* A change fires the `input_mode_changed` hook. Setting the mode it
+	* already has does nothing.
+	*/
+	setInputMode(mode: string | null): boolean;
+	/**
+	* Which widget holds focus in one of this plugin's mounted panels —
+	* its key, or `""` when nothing is focused or the panel is not mounted.
+	* 
+	* The host owns a panel's focus: Tab, a click, a control's own move and
+	* `setFocusKey` all write the one fact this reads. Read it rather than
+	* mirroring focus from `focus` events — every `widget_event` also carries
+	* it, as `focus_key`.
+	*/
+	getPanelFocusKey(panelId: number): string;
+	/**
+	* Get the active window's editor mode (see `setEditorMode`)
 	*/
 	getEditorMode(): string | null;
 	/**
+	* Get the editor-wide input mode (see `setInputMode`)
+	*/
+	getInputMode(): string | null;
+	/**
 	* Close a split.
+	* 
+	* The last remaining split cannot be closed; the request is logged and
+	* ignored.
 	* 
 	* Queued, like every layout mutation: the returned bool only reports that
 	* the command was sent, not that it took effect, and a read issued right
@@ -4034,8 +7261,14 @@ interface EditorAPI {
 	* that need the id should listen for that event rather than
 	* polling `listWindows`.
 	* 
-	* Returns `false` only when the IPC channel to the editor is
-	* closed (editor is shutting down).
+	* It does not switch to the new session. Call `setActiveWindow` for
+	* that.
+	* 
+	* Returns `false` only when the editor can no longer take commands (for
+	* example while it shuts down).
+	* 
+	* @param label - Display label. An empty string uses the root's base
+	* name.
 	*/
 	createWindow(root: string, label: string): boolean;
 	/**
@@ -4043,6 +7276,10 @@ interface EditorAPI {
 	* already active. Errors (id not found) are logged on the
 	* editor side; the JS caller can verify by reading
 	* `activeWindow()` after.
+	* 
+	* Each session keeps its own splits, buffers and language servers, so
+	* switching back to one does not recreate buffers or restart its
+	* language servers.
 	* 
 	* **Not every id you can read is a window id.** The orchestrator's
 	* `listWorkspaces()` reports a *negative* `windowId` for a workspace it
@@ -4052,17 +7289,13 @@ interface EditorAPI {
 	* `getPluginApi("orchestrator").focusWorkspace(workspaceId)`, which
 	* attaches a session at the worktree first.
 	* 
-	* Returns `false` for any non-positive id rather than throwing. It used
-	* to be declared as an unsigned integer, so a negative id failed inside
-	* the JS→Rust conversion with `Error converting from js 'f64' into type
-	* 'u64': Underflow` — an exception, from a line that looked fine, naming
-	* nothing the caller had written.
+	* Returns `false` for any non-positive id rather than throwing.
 	*/
 	setActiveWindow(id: number): boolean;
 	/**
 	* Switch the active window with a directional wipe on the
-	* incoming content. `from_edge`: "top" | "bottom" | "left" |
-	* "right". See `PluginCommand::SetActiveWindowAnimated`.
+	* incoming content. `fromEdge`: "top" | "bottom" | "left" |
+	* "right".
 	* 
 	* Same id rules as `setActiveWindow`: a non-positive id returns `false`.
 	*/
@@ -4071,12 +7304,24 @@ interface EditorAPI {
 	* Restrict (and order) the windows that Next/Prev Window cycle
 	* through to `ids`, in this order. An empty array clears the
 	* override (back to every window, by id). Non-open ids are skipped
-	* at cycle time. See `PluginCommand::SetWindowCycleOrder`.
+	* at cycle time.
 	*/
 	setWindowCycleOrder(ids: number[]): boolean;
 	/**
+	* Load every saved workspace into `listWindows()`, once.
+	* 
+	* A launch starts with only the workspaces of its own directory (plus,
+	* in Orchestrator mode, the one last used); the rest of the registry is
+	* read on first use rather than at startup. Call this before listing workspaces to a
+	* user. Resolves once `listWindows()` includes them all; resolves at
+	* once when they already are.
+	*/
+	loadWorkspaces(): Promise<void>;
+	/**
 	* Close session `id`. Refuses to close the active session or
 	* the base session (id 1). Logs and no-ops on failure.
+	* 
+	* The session's buffers close with it.
 	*/
 	closeWindow(id: number): boolean;
 	/**
@@ -4096,15 +7341,18 @@ interface EditorAPI {
 	*/
 	prewarmWindow(id: number): boolean;
 	/**
-	* Register a `notify`-backed watch on `path`. Returns a
+	* Register a watch on `path`. Returns a
 	* promise that resolves to a numeric `handle` (also passed
 	* in subsequent `path_changed` event payloads). The promise
-	* rejects on `notify` errors (path missing, kernel limit).
+	* rejects when the watch cannot be set up (path missing, kernel limit).
+	* 
+	* Each change fires a `path_changed` hook with the handle, the changed
+	* path and the change kind. Release the watch with
+	* `unwatchPath(handle)`.
 	* 
 	* `recursive` defaults to `false`. Non-recursive watches
 	* cover the path itself plus its direct children for
-	* directories — see `services/file_watcher.rs` for the
-	* rationale.
+	* directories.
 	*/
 	watchPath(path: string, recursive?: boolean): Promise<number>;
 	/**
@@ -4117,7 +7365,8 @@ interface EditorAPI {
 	* preview pane should render the entire split tree of
 	* session `id` natively. `0` (or any unknown id) clears the
 	* override and the preview falls back to the existing
-	* path-based phantom-leaf renderer.
+	* path-based phantom-leaf renderer. `clearWindowPreview` clears it
+	* too.
 	* 
 	* Orchestrator calls this on each prompt-selection-change so
 	* the right pane shows the highlighted session's full
@@ -4133,6 +7382,9 @@ interface EditorAPI {
 	/**
 	* All editor sessions, sorted by id (creation order). Always
 	* non-empty (the base session is always present).
+	* 
+	* Each entry gives the session's id, label and root, among other
+	* fields.
 	*/
 	listWindows(): WindowInfo[];
 	/**
@@ -4141,12 +7393,32 @@ interface EditorAPI {
 	*/
 	activeWindow(): number;
 	/**
+	* Scroll a widget-panel buffer so the widget with `key` sits at the
+	* top of its split, with the cursor on it.
+	* 
+	* The panel already knows where it painted every keyed widget, so
+	* a page navigating to its own content asks rather than derives.
+	* Deriving means painting, reading the buffer text back, matching
+	* your own captions as strings and converting line numbers to byte
+	* offsets — which is what this replaces, and which broke twice in
+	* the welcome screen before it did.
+	* 
+	* A widget spanning several rows (a card whose rows share one key)
+	* anchors at its top. Unknown keys are a no-op.
+	* 
+	* Queued like every layout mutation: `await editor.flush()` before
+	* reading back.
+	*/
+	scrollToWidget(bufferId: number, key: string, align?: ScrollAlign): boolean;
+	/**
 	* Set the scroll position of a split.
 	* 
 	* Queued, like every layout mutation: the returned bool only reports that
 	* the command was sent, not that it took effect, and a read issued right
 	* after it still sees the old state. `await editor.flush()` before
 	* reading back.
+	* 
+	* @param topByte - The byte offset of the top visible line
 	*/
 	setSplitScroll(splitId: number, topByte: number): boolean;
 	/**
@@ -4180,10 +7452,18 @@ interface EditorAPI {
 	getSplitByLabel(label: string): Promise<number | null>;
 	/**
 	* Distribute all splits evenly
+	* 
+	* It sets the ratio of every split container in the active window so
+	* each leaf split gets equal space.
 	*/
 	distributeSplitsEvenly(): boolean;
 	/**
 	* Set cursor position in a buffer
+	* 
+	* The cursor moves in every split showing the buffer, and each viewport
+	* scrolls to keep it visible.
+	* 
+	* @param position - Byte offset position for the cursor
 	*/
 	setBufferCursor(bufferId: number, position: number): boolean;
 	/**
@@ -4196,7 +7476,32 @@ interface EditorAPI {
 	*/
 	setBufferShowCursors(bufferId: number, show: boolean): boolean;
 	/**
+	* Choose the grammar a virtual buffer is highlighted with.
+	* 
+	* Panel buffers are named `*<panel id>*`, which resolves to no
+	* grammar; a plugin composing a known text shape into one calls this
+	* so the host highlights it instead of the plugin painting overlays.
+	*/
+	setBufferLanguage(bufferId: number, name: string): boolean;
+	/**
+	* Show old/new diff line numbers in a composed diff stream's gutter,
+	* derived by the host from the stream's `@@` headers.
+	*/
+	setBufferDiffGutter(bufferId: number, enabled: boolean): boolean;
+	/**
 	* Set a line indicator in the gutter
+	* 
+	* The symbol is drawn in the gutter's indicator column. When several
+	* indicators land on the same line, the one with the highest priority wins.
+	* Indicator namespaces are cleared automatically when the plugin unloads.
+	* 
+	* @param line - Line number (0-indexed)
+	* @param namespace - Namespace for grouping (e.g., "git-gutter", "breakpoints")
+	* @param symbol - Symbol to display (e.g., "│", "●", "★")
+	* @param r - Red color component (0-255)
+	* @param g - Green color component (0-255)
+	* @param b - Blue color component (0-255)
+	* @param priority - Priority when multiple indicators exist (higher wins)
 	*/
 	setLineIndicator(bufferId: number, line: number, namespace: string, symbol: string, r: number, g: number, b: number, priority: number): boolean;
 	/**
@@ -4205,6 +7510,10 @@ interface EditorAPI {
 	setLineIndicators(bufferId: number, lines: number[], namespace: string, symbol: string, r: number, g: number, b: number, priority: number): boolean;
 	/**
 	* Clear line indicators in a namespace
+	* 
+	* Removes all of this namespace's indicators from the buffer.
+	* 
+	* @param namespace - Namespace to clear (e.g., "git-gutter")
 	*/
 	clearLineIndicators(bufferId: number, namespace: string): boolean;
 	/**
@@ -4217,8 +7526,21 @@ interface EditorAPI {
 	* of any size) or by 0-based `line`, optionally spans to `end`, and
 	* carries an RGB triple or a theme key as its `color`.
 	* 
+	* A `line` is converted to a byte anchor when the marker is set. An `end`
+	* byte makes a range marker that paints a proportional streak instead of a
+	* single cell. Theme keys are resolved at render time, so markers follow
+	* theme changes. `priority` breaks ties when several markers land on the
+	* same track cell (higher wins).
+	* 
 	* The set is replaced atomically, so a refresh never renders a partially
 	* rebuilt set.
+	* 
+	* ```ts
+	* editor.setScrollbarMarkers(bufferId, "my-plugin", [
+	*   { position: 4096, color: "diagnostic.error" },
+	*   { position: 8192, end: 9000, color: [80, 200, 120], priority: 2 },
+	* ]);
+	* ```
 	*/
 	setScrollbarMarkers(bufferId: number, namespace: string, markers: ScrollbarMarker[]): boolean;
 	/**
@@ -4229,10 +7551,21 @@ interface EditorAPI {
 	* This is the primitive for plugins that decorate the viewport as it
 	* scrolls (a `lines_changed` producer): publish the region you just
 	* scanned without resending — or losing — the rest of the file.
+	* 
+	* The `lines_changed` hook reports only the lines the editor decided to
+	* process, usually the viewport. A whole-namespace replace from it would
+	* delete the markers for everything off screen. With range scoping,
+	* coverage builds up as the user explores the document. See
+	* `markdown_compose.ts`, which marks headings this way.
+	* 
+	* @param start - Start byte offset of the region (inclusive)
+	* @param end - End byte offset of the region (exclusive)
 	*/
 	setScrollbarMarkersInRange(bufferId: number, namespace: string, start: number, end: number, markers: ScrollbarMarker[]): boolean;
 	/**
 	* Remove all scrollbar markers in a namespace
+	* 
+	* Namespaces are also cleared automatically when the plugin unloads.
 	*/
 	clearScrollbarMarkers(bufferId: number, namespace: string): boolean;
 	/**
@@ -4248,19 +7581,35 @@ interface EditorAPI {
 	* wants `setLineNumbersDefault` instead: re-asserting the pin from a
 	* `buffer_activated` handler overwrites whatever the user chose
 	* (issue #2931).
+	* 
+	* The return value says the command was queued, not that the gutter ended
+	* up visible.
+	* 
+	* @param enabled - Whether to show line numbers
 	*/
 	setLineNumbers(bufferId: number, enabled: boolean): boolean;
 	/**
 	* Set this plugin's line-number *default* for a buffer, the way
 	* `setFoldIndicators` does for the gutter's fold arrows.
 	* 
+	* Three settings decide whether the gutter shows line numbers, in this
+	* order:
+	* 
+	* 1. the user's per-buffer pin ("Toggle Line Numbers (Current Buffer)",
+	*    or `setLineNumbers`);
+	* 2. this plugin default;
+	* 3. the global `editor.line_numbers` setting.
+	* 
 	* Pass `null` to withdraw the plugin's opinion and fall back to the
 	* user's own setting. The plugin's value is stored separately from that
 	* setting and is never persisted, so it can neither overwrite a
 	* deliberate choice — "Toggle Line Numbers (Current Buffer)" and
 	* `setLineNumbers` still win while this is set — nor leak into the saved
-	* session. A mode that hides the gutter should still clear its value on
-	* the way out.
+	* session. No save/restore is needed on the way out, because the user's
+	* setting is untouched. A mode that hides the gutter should still clear
+	* its value on the way out.
+	* 
+	* @param enabled - The mode's default, or `null` to withdraw it
 	*/
 	setLineNumbersDefault(bufferId: number, enabled: boolean | null): boolean;
 	/**
@@ -4278,9 +7627,12 @@ interface EditorAPI {
 	/**
 	* Enable or disable indentation guides for a buffer, overriding the global
 	* `editor.indentation_guide` setting. Tool views that render non-editable
-	* content (e.g. the Git Log commit-detail diff) disable them.
+	* content (e.g. the Git Log commit-detail diff) disable them, and so does
+	* markdown compose mode. `null` withdraws the override rather than forcing
+	* guides on, so a buffer leaving compose gets back whatever the user's own
+	* settings resolve to — the same shape `setFoldIndicators` uses.
 	*/
-	setIndentationGuide(bufferId: number, enabled: boolean): boolean;
+	setIndentationGuide(bufferId: number, enabled: boolean | null): boolean;
 	/**
 	* Set the view mode for a buffer ("source" or "compose")
 	*/
@@ -4290,11 +7642,15 @@ interface EditorAPI {
 	*/
 	setLineWrap(bufferId: number, splitId: number | null, enabled: boolean): boolean;
 	/**
-	* Set plugin-managed per-buffer view state (write-through to snapshot + command for persistence)
+	* Set plugin-managed per-buffer view state, as seen in the active split.
+	* `getViewState` returns the new value straight away; `null` or
+	* `undefined` deletes the key. For a buffer backed by a file, the state
+	* is saved with the workspace and comes back when it is restored.
 	*/
 	setViewState(bufferId: number, key: string, value: unknown): boolean;
 	/**
-	* Get plugin-managed per-buffer view state (reads from snapshot)
+	* Get plugin-managed per-buffer view state, as set by `setViewState`.
+	* `undefined` if missing.
 	*/
 	getViewState(bufferId: number, key: string): unknown;
 	/**
@@ -4324,39 +7680,66 @@ interface EditorAPI {
 	*/
 	getMarker(bufferId: number, key: string): unknown;
 	/**
-	* Set plugin-managed global state (write-through to snapshot + command for persistence).
+	* Set plugin-managed global state.
 	* State is automatically isolated per plugin using the plugin's name.
-	* TODO: Need to think about plugin isolation / namespacing strategy for these APIs.
+	* `getGlobalState` returns the new value straight away; `null` or
+	* `undefined` deletes the key. The state is saved to disk as soon as the
+	* editor applies the change, so it survives restarts.
 	*/
 	setGlobalState(key: string, value: unknown): boolean;
 	/**
-	* Get plugin-managed global state (reads from snapshot).
+	* Get plugin-managed global state, as set by `setGlobalState`.
+	* `undefined` if missing.
 	* State is automatically isolated per plugin using the plugin's name.
-	* TODO: Need to think about plugin isolation / namespacing strategy for these APIs.
 	*/
 	getGlobalState(key: string): unknown;
 	/**
 	* Set per-session state on the **active** session. Same
-	* shape as `setGlobalState` (write-through to snapshot +
-	* dispatched to editor; null/undefined deletes), but the
-	* underlying storage lives on `Session.plugin_state` and
-	* swaps with the rest of session state on `setActiveWindow`.
+	* shape as `setGlobalState` (`getWindowState` returns the new value
+	* straight away; null/undefined deletes), but the state belongs to
+	* the active session and swaps with the rest of session state on
+	* `setActiveWindow`.
 	* Plugins that genuinely want per-project state use this;
 	* Orchestrator itself uses `setGlobalState` because its session
 	* list lives above session boundaries.
+	* 
+	* The state is per plugin. It follows the session across saves and
+	* restores instead of applying globally.
 	*/
 	setWindowState(key: string, value: unknown): boolean;
 	/**
-	* Get per-session state from the **active** session
-	* (snapshot read). `undefined` if missing.
+	* Get per-session state from the **active** session.
+	* `undefined` if missing.
+	* 
+	* The state is per plugin, as written by `setWindowState`.
 	*/
 	getWindowState(key: string): unknown;
 	/**
 	* Create a scroll sync group for anchor-based synchronized scrolling
+	* 
+	* Used for side-by-side diff views where two panes need to scroll
+	* together. Lines follow the anchors; the horizontal scroll is shared
+	* as-is between two panes that both scroll sideways (a pane in compose
+	* view, or with line wrap on, keeps its own).
+	* 
+	* The plugin provides the group ID, which must be unique per plugin. A
+	* group is removed automatically when the plugin unloads, or when
+	* either of its panes closes; its ID can then be used again.
+	* 
+	* @param groupId - Plugin-assigned group ID
+	* @param leftSplit - The left (primary) split; scroll is tracked in its lines
+	* @param rightSplit - The right (secondary) split; follows via the anchors
 	*/
 	createScrollSyncGroup(groupId: number, leftSplit: number, rightSplit: number): boolean;
 	/**
 	* Set sync anchors for a scroll sync group
+	* 
+	* Anchors map corresponding line numbers between the left and right
+	* buffers. Each anchor is a `[leftLine, rightLine]` pair. Entries with
+	* fewer than two numbers are ignored.
+	* 
+	* @param groupId - The group ID passed to `createScrollSyncGroup`
+	* @param anchors - `[leftLine, rightLine]` pairs marking matching positions
 	*/
 	setScrollSyncAnchors(groupId: number, anchors: number[][]): boolean;
 	/**
@@ -4366,13 +7749,31 @@ interface EditorAPI {
 	/**
 	* Execute multiple actions in sequence
 	* 
-	* Takes typed ActionSpec array - serde validates field names at runtime
+	* The actions are checked when the call is made; an entry that doesn't
+	* match the type (for example one with a misspelled field name) makes the
+	* call throw.
+	* 
+	* Each action has an optional repeat count. Vi mode uses this for count
+	* prefixes (e.g., "3dw" deletes 3 words). All actions run in one batch,
+	* with no plugin round trips between them. Execution stops at the first
+	* unknown or failing action.
+	* 
+	* @param actions - Array of `{action: string, count?: number}` objects
 	*/
 	executeActions(actions: ActionSpec[]): boolean;
 	/**
 	* Show an action popup
 	* 
-	* Takes a typed ActionPopupOptions struct - serde validates field names at runtime
+	* The options are checked when the call is made; options that don't match
+	* the type (for example a misspelled field name) make the call throw.
+	* 
+	* Each action's `id` is its row's key and must be unique among the
+	* actions; a repeated one throws.
+	* 
+	* The popup shows buttons for user interaction. When the user selects an
+	* action, the `action_popup_result` hook is fired.
+	* 
+	* @param opts - Popup configuration with id, title, message, and actions
 	*/
 	showActionPopup(opts: ActionPopupOptions): boolean;
 	/**
@@ -4382,18 +7783,27 @@ interface EditorAPI {
 	* `action`) as well as by display label, so the placement survives a
 	* locale change. Naming a menu that doesn't exist is a no-op.
 	* 
-	* Takes a typed AddMenuItemOptions struct - serde validates field
-	* names at runtime.
+	* The options are checked when the call is made; options that don't match
+	* the type (for example a misspelled field name) make the call throw.
 	*/
 	addMenuItem(opts: AddMenuItemOptions): boolean;
 	/**
 	* Contribute (or replace, or clear) menu rows for the LSP-Servers
 	* popup. Pass an empty `items` to clear this plugin's slice for
-	* the given language. See `PluginCommand::SetLspMenuContributions`.
+	* the given language.
+	* 
+	* Each item's `id` is its row's key and must be unique among the
+	* items; a repeated one throws.
 	*/
 	setLspMenuContributions(pluginId: string, language: string, items: TsLspMenuItem[]): boolean;
 	/**
 	* Disable LSP for a specific language
+	* 
+	* Stops the language's server and persists the change to the config.
+	* LSP helper plugins use this to let users disable LSP for languages
+	* where the server is not available or not working.
+	* 
+	* @param language - The language to disable LSP for (e.g., "python", "rust")
 	*/
 	disableLspForLanguage(language: string): boolean;
 	/**
@@ -4418,18 +7828,59 @@ interface EditorAPI {
 	setLspRootUri(language: string, uri: string): boolean;
 	/**
 	* Get all diagnostics from LSP
+	* 
+	* Returns the diagnostics for all files.
 	*/
 	getAllDiagnostics(): JsDiagnostic[];
 	/**
 	* Get registered event handlers for an event
+	* 
+	* Returns the handler names.
+	* 
+	* @param eventName - Name of the event
 	*/
 	getHandlers(eventName: string): string[];
 	/**
 	* Create a virtual buffer in current split (async, returns buffer and split IDs)
+	* 
+	* Without `splitId`, the buffer opens as a new tab in the current split.
+	* This suits help panels, documentation and similar views that should
+	* open alongside other buffers rather than in a separate split.
+	* 
+	* @param opts - Configuration for the virtual buffer
 	*/
 	createVirtualBuffer(opts: CreateVirtualBufferOptions): Promise<VirtualBufferResult>;
 	/**
 	* Create a virtual buffer in a new split (async, returns buffer and split IDs)
+	* 
+	* By default the new split is stacked below the current pane. Use it for
+	* results panels, diagnostics, logs and similar. `panelId` makes updates
+	* idempotent: if a panel with that ID already exists, its content is
+	* replaced instead of creating a new split. Define the mode with
+	* `defineMode` first.
+	* 
+	* `ratio` is the share of the first pane, which is the existing content
+	* unless `before` is set.
+	* 
+	* ```ts
+	* // First define the mode with keybindings
+	* editor.defineMode("search-results", [
+	*   ["Return", "search_goto"],
+	*   ["q", "close_buffer"],
+	* ], true);
+	* 
+	* // Then create the buffer
+	* const { bufferId, splitId } = await editor.createVirtualBufferInSplit({
+	*   name: "*Search*",
+	*   mode: "search-results",
+	*   readOnly: true,
+	*   entries: [
+	*     { text: "src/main.rs:42: match\n", properties: { file: "src/main.rs", line: 42 } },
+	*   ],
+	*   ratio: 0.7, // existing pane keeps 70%, the panel gets 30%
+	*   panelId: "search",
+	* });
+	* ```
 	*/
 	createVirtualBufferInSplit(opts: CreateVirtualBufferInSplitOptions): Promise<VirtualBufferResult>;
 	/**
@@ -4456,6 +7907,23 @@ interface EditorAPI {
 	* back to the global bindings.
 	*/
 	setBufferMode(bufferId: number, mode: string): boolean;
+	/**
+	* Set the title a buffer group's tab shows, as a list of segments.
+	* 
+	* The tab shows the segments' text one after another. A segment that
+	* names a panel stands for the file that panel shows: while that file
+	* has unsaved changes, the tab shows `*` right after the segment, as a
+	* file's own tab does after its name. So a group comparing two files
+	* can say which of them is unsaved, rather than marking the whole tab.
+	* 
+	* Replaces the name the group was created with. Returns `false` only
+	* if the command could not be sent; an unknown group or panel is
+	* ignored (an unknown panel's segment shows its text, never a `*`).
+	* 
+	* @param groupId - The group, as `createBufferGroup` returned it
+	* @param segments - The title's pieces, in order
+	*/
+	setBufferGroupTitle(groupId: number, segments: BufferGroupTitleSegment[]): boolean;
 	/**
 	* Show or hide one panel of a buffer group, without tearing the
 	* group down.
@@ -4510,6 +7978,18 @@ interface EditorAPI {
 	setVirtualBufferContent(bufferId: number, entriesArr: Record<string, unknown>[]): boolean;
 	/**
 	* Get text properties at cursor position (returns JS array)
+	* 
+	* Returns the `properties` object of every entry whose text covers the
+	* cursor, or an empty array when none does.
+	* 
+	* ```ts
+	* const props = editor.getTextPropertiesAtCursor(bufferId);
+	* if (props.length > 0 && typeof props[0].file === "string") {
+	*   editor.openFile(props[0].file, props[0].line as number, 0);
+	* }
+	* ```
+	* 
+	* @param bufferId - ID of the buffer to query
 	*/
 	getTextPropertiesAtCursor(bufferId: number): TextPropertiesAtCursor;
 	/**
@@ -4520,10 +8000,11 @@ interface EditorAPI {
 	* `updateWidgetPanel` calls re-render the panel against the
 	* previously-mounted spec.
 	* 
-	* Returns true on successful queue, false if the IPC channel is
-	* closed.
+	* Returns `true` once the mount is queued. Returns `false` when `spec`
+	* or `options` is malformed (the error is logged), or when the editor
+	* can no longer take commands (for example while it shuts down).
 	*/
-	mountWidgetPanel(panelId: number, bufferId: number, specObj: unknown): boolean;
+	mountWidgetPanel(panelId: number, bufferId: number, specObj: unknown, optionsObj?: WidgetPanelOptions): boolean;
 	/**
 	* Replace the spec of a previously-mounted widget panel.
 	* No-op if the panel id was never mounted.
@@ -4546,8 +8027,8 @@ interface EditorAPI {
 	*/
 	widgetCommand(panelId: number, actionObj: unknown): boolean;
 	/**
-	* Apply a targeted mutation to a mounted widget panel — the
-	* IPC fast path. Use instead of `updateWidgetPanel` when the
+	* Apply a targeted mutation to a mounted widget panel. Use instead of
+	* `updateWidgetPanel` when the
 	* model change touches a single widget; the host applies the
 	* mutation in place without re-transmitting the full spec.
 	* See `WidgetMutation` in fresh.d.ts for the shapes.
@@ -4556,10 +8037,56 @@ interface EditorAPI {
 	/**
 	* Mount a declarative widget panel as a centered floating
 	* overlay (not bound to any virtual buffer).
+	* 
+	* @param panelId - Your id for this panel. Events for it carry the same id
+	* @param specObj - The `WidgetSpec` widgets to show
+	* @param widthPct - Width, as a percent of the screen (1-100)
+	* @param heightPct - Height, as a percent of the screen (1-100)
+	* @param asDock - Dock it at the side instead of centring it
+	* @param focusMarker - Draw `▸` next to the focused control
+	* @param title - Title in the frame
+	* @param closable - Show a `[×]` that closes the dialog like Esc
+	* @param startBlurred - Open without taking the keyboard
+	* @param mode - A `defineMode` keymap for the dialog (e.g. Enter to submit)
+	* @param labelAlign - `"left"` (default) or `"right"` alignment of field labels
 	*/
-	mountFloatingWidget(panelId: number, specObj: unknown, widthPct: number, heightPct: number, asDock?: boolean, focusMarker?: boolean, title?: string, closable?: boolean, startBlurred?: boolean): boolean;
+	mountFloatingWidget(panelId: number, specObj: unknown, widthPct: number, heightPct: number, asDock?: boolean, focusMarker?: boolean, title?: string, closable?: boolean, startBlurred?: boolean, mode?: string, labelAlign?: string): boolean;
+	/**
+	* Mount a declarative widget panel as a **sidebar section**: a titled,
+	* collapsible section of the file explorer's column, appended after
+	* the explorer and any section already there. The sidebar is shown if
+	* it was hidden.
+	* 
+	* `rows` is the section's requested body height in rows (`0` shares the
+	* column with the explorer); a divider the user has dragged overrides
+	* it. `opts.closable` (default `true`) puts a `×` on the header that
+	* removes the section and fires the panel's `cancel` `widget_event`;
+	* `opts.startBlurred` (default `false`) mounts without taking keyboard
+	* focus.
+	* 
+	* The section is an ordinary panel: `updateFloatingWidget(panelId, spec)`
+	* replaces its content, `unmountFloatingWidget(panelId)` removes the
+	* section, `widgetMutate` / `widgetCommand` apply, and its hits arrive
+	* through the `widget_event` hook with this `panelId` unchanged.
+	* `floatingPanelControl(panelId, "sidebar_rows", n)` changes the
+	* requested rows, `"focus"` / `"blur"` work as for the dock, and
+	* `"dock"` / `"center"` re-anchor the panel out of the sidebar (with
+	* `"sidebar"` bringing a dock or centered panel in). Mounting an id that
+	* is already a section replaces its content in place.
+	*/
+	mountSidebarSection(panelId: number, specObj: unknown, title: string, rows: number, opts?: {
+		closable?: boolean;
+		startBlurred?: boolean;
+		scope?: {
+			buffer: number;
+		} | {
+			window: number;
+		} | "editor";
+	}): boolean;
 	/**
 	* Replace the spec of the currently-mounted floating widget panel.
+	* 
+	* What the user typed into keyed fields is kept.
 	*/
 	updateFloatingWidget(panelId: number, specObj: unknown): boolean;
 	/**
@@ -4568,10 +8095,15 @@ interface EditorAPI {
 	unmountFloatingWidget(panelId: number): boolean;
 	/**
 	* Control a mounted floating panel's placement / focus without
-	* re-sending its spec. `op`: "dock" (`arg` = width in columns),
-	* "center", "focus", "blur", "fullscreen" (`arg != 0` makes a
-	* centered panel cover the whole frame over the dock). See
-	* `PluginCommand::FloatingPanelControl`.
+	* re-sending its spec. `op`: "dock" (re-anchor as the left dock and
+	* focus; `arg` unused — the width is the editor's), "dock_width"
+	* (`arg` = width in columns; sticks like a drag, across resizes and
+	* launches), "center", "focus", "blur", "fullscreen" (`arg != 0` makes
+	* a centered panel cover the whole frame over the dock), "sidebar"
+	* (`arg` = requested rows; re-anchors the panel as a sidebar section
+	* under the file explorer — "dock" / "center" re-anchor it back out),
+	* "sidebar_rows" (`arg` = requested rows for a section; a divider the
+	* user has dragged wins).
 	*/
 	floatingPanelControl(panelId: number, op: string, arg: number): boolean;
 	/**
@@ -4601,6 +8133,13 @@ interface EditorAPI {
 	* directly into the named file instead of buffering it. The
 	* resolved `SpawnResult.stdout` is empty in that case; the bytes
 	* land on disk for `openFile` to pick up as a file-backed buffer.
+	* 
+	* @deprecated Run commands on a machine instead: `editor.runOnTarget`
+	* for the active window, or `run` on the machine
+	* `editor.openMachine({ kind: "window", window })` returns for any
+	* window, so the command runs where that window's files are. Both take
+	* the same arguments, return the same killable handle, and resolve with
+	* `{ code, stdout, stderr }`. `spawnHostProcess` runs on this computer.
 	*/
 	spawnProcess(command: string, args: string[], cwd?: string, stdoutTo?: string): ProcessHandle<SpawnResult>;
 	/**
@@ -4618,13 +8157,13 @@ interface EditorAPI {
 	* The payload is a JS object describing filesystem + spawner +
 	* terminal wrapper + display label. The canonical schema lives in
 	* the `AuthorityPayload` type in `fresh-editor`; plugins should
-	* hand-build objects that match it. Fire-and-forget: the editor
-	* restarts as part of the transition, so the plugin is reloaded
-	* before any follow-up work can run on this call's return value.
+	* hand-build objects that match it. Fire-and-forget: returns before the
+	* authority is live and reloads nothing, so follow-up work belongs in an
+	* `authority_changed` handler.
 	*/
 	setAuthority(payload: AuthorityPayload): boolean;
 	/**
-	* Restore the default local authority. Same restart semantics as
+	* Restore the default local authority on this window. Same semantics as
 	* `setAuthority`.
 	*/
 	clearAuthority(): void;
@@ -4635,12 +8174,12 @@ interface EditorAPI {
 	* session in the background — and this returns a promise that settles on
 	* the real outcome:
 	* 
-	* * resolves once the session (authority + window) is fully
-	* constructed, so a caller can keep its dialog open until there is a
-	* real session to show;
-	* * rejects with the failure reason (e.g. ssh "Could not resolve
-	* hostname") if the connect or window creation fails — in which case
-	* no window is created and the editor stays on its current authority.
+	*   * resolves once the session (authority + window) is fully
+	*     constructed, so a caller can keep its dialog open until there is a
+	*     real session to show;
+	*   * rejects with the failure reason (e.g. ssh "Could not resolve
+	*     hostname") if the connect or window creation fails — in which case
+	*     no window is created and the editor stays on its current authority.
 	* 
 	* The payload schema (`RemoteAgentSpec`) lives in `fresh-editor`;
 	* plugins hand-build an object matching it.
@@ -4678,9 +8217,8 @@ interface EditorAPI {
 	* ```
 	* 
 	* The override sticks until replaced or cleared via
-	* `clearRemoteIndicatorState`. Editor restart (e.g. on
-	* `setAuthority`) resets it — plugins must reassert after a
-	* post-restart init if they want the override to persist.
+	* `clearRemoteIndicatorState`. It survives an authority change but not a
+	* relaunch.
 	*/
 	setRemoteIndicatorState(state: RemoteIndicatorStatePayload): boolean;
 	/**
@@ -4699,8 +8237,13 @@ interface EditorAPI {
 	* 
 	* This uses the editor's built-in HTTP client (`ureq`), so plugins
 	* don't need `curl`/`wget` on PATH.
+	* 
+	* `headers` are extra request headers (`{ "Authorization": "Bearer …" }`).
+	* They travel in the request only: never logged, never on a command line,
+	* which is why a credential goes here rather than through `curl -H`.
+	* Non-string values are ignored.
 	*/
-	httpFetch(url: string, targetPath: string): ProcessHandle<SpawnResult>;
+	httpFetch(url: string, targetPath: string, headers?: Record<string, string> | null): ProcessHandle<SpawnResult>;
 	/**
 	* Wait for a process to complete and get its result (async)
 	*/
@@ -4740,6 +8283,32 @@ interface EditorAPI {
 	*/
 	diffBaselinePair(oldBaselineId: number, newBaselineId: number): Promise<DiffBaselineResult>;
 	/**
+	* Line diff of two live buffers, measured in their own bytes (async):
+	* each hunk's byte range on both sides, each changed line's text
+	* range, and the part of a paired line that differs from its
+	* counterpart. The texts never cross into the plugin — use this
+	* instead of `getBufferText` + `computeLineDiff` when the offsets will
+	* be used to decorate or edit the buffers.
+	* 
+	* Rejects when either buffer is binary or in large-file mode.
+	*/
+	compareBuffers(leftId: number, rightId: number): Promise<CompareResult>;
+	/**
+	* Replace the bytes `start..end` of a buffer with `text`, as one edit
+	* and one undo step (async). Resolves `true` once applied; `false`,
+	* leaving the buffer as it was, when it is read-only or binary or the
+	* range is outside it.
+	* 
+	* `expectedVersion` (a `leftVersion` / `rightVersion` from
+	* `compareBuffers`) makes the edit conditional: if the buffer has
+	* changed since, the offsets may name other text, so nothing is done
+	* and it resolves `false`.
+	* 
+	* `deleteRange` followed by `insertText` is two edits, so undoing it
+	* stops half way.
+	*/
+	replaceRange(bufferId: number, start: number, end: number, text: string, expectedVersion?: number): Promise<boolean>;
+	/**
 	* Fetch baseline lines for `(startLine, count)` ranges in one
 	* batched call (async). Lines come back without trailing newlines,
 	* grouped per requested range — fetch only the old-side lines a
@@ -4765,18 +8334,18 @@ interface EditorAPI {
 	* it puts three obligations on you that a timer discharges for free:
 	* 
 	* 1. **A throw anywhere in the loop body ends it, silently.** The loop
-	* is a detached async function, so the rejection has nowhere to
-	* surface; the panel simply stops updating, with nothing in the log
-	* pointing at why. Every `await` inside must be individually
-	* guarded. A timer handler's throw is caught and logged by the host,
-	* and the *next* tick still fires.
+	*    is a detached async function, so the rejection has nowhere to
+	*    surface; the panel simply stops updating, with nothing in the log
+	*    pointing at why. Every `await` inside must be individually
+	*    guarded. A timer handler's throw is caught and logged by the host,
+	*    and the *next* tick still fires.
 	* 2. **You must cancel it yourself.** A loop keeps running after its
-	* plugin is unloaded or reloaded until its own guard notices, so it
-	* needs a liveness check that survives a reload — an identity check
-	* (`myBufferId === currentBufferId`), not a boolean, or a reopened
-	* panel ends up with two loops. Timers are cancelled on unload.
+	*    plugin is unloaded or reloaded until its own guard notices, so it
+	*    needs a liveness check that survives a reload — an identity check
+	*    (`myBufferId === currentBufferId`), not a boolean, or a reopened
+	*    panel ends up with two loops. Timers are cancelled on unload.
 	* 3. **The first iteration is one period late** unless you also do the
-	* work once before entering the loop.
+	*    work once before entering the loop.
 	* 
 	* A loop is still the better shape when each iteration's decision
 	* depends on the last one's result, or when you want a single ticker
@@ -4832,17 +8401,17 @@ interface EditorAPI {
 	* Resolves after `durationMs`. Two things it is very good at:
 	* 
 	* - a pause inside work you are already inside of — a debounce, a retry
-	* backoff, a settle before reading state back;
+	*   backoff, a settle before reading state back;
 	* - a **timeout**, by racing it against the real work:
-	* ```js
-	* const timedOut = Symbol("timeout");
-	* const outcome = await Promise.race([
-	* doTheWork().then(() => "ok"),
-	* editor.delay(8000).then(() => timedOut),
-	* ]);
-	* ```
-	* which is how the bundled dashboard stops one slow section from
-	* stalling the panel.
+	*   ```js
+	*   const timedOut = Symbol("timeout");
+	*   const outcome = await Promise.race([
+	*       doTheWork().then(() => "ok"),
+	*       editor.delay(8000).then(() => timedOut),
+	*   ]);
+	*   ```
+	*   which is how the bundled dashboard stops one slow section from
+	*   stalling the panel.
 	* 
 	* For a *periodic background* task, weigh it against
 	* `editor.setInterval(ms, "handlerName")`. A detached
@@ -4855,11 +8424,19 @@ interface EditorAPI {
 	* unloaded or reloaded, until its own guard notices. Gate it on an
 	* identity (`myBufferId === currentBufferId`) rather than a boolean, or
 	* reloading leaves two loops racing.
+	* 
+	* @param durationMs - Number of milliseconds to delay
 	*/
 	delay(durationMs: number): Promise<void>;
 	/**
 	* Project-wide grep search (async)
-	* Searches all files in the project, respecting .gitignore.
+	* Searches the project's files by Quick Open's rules, with hidden and
+	* gitignored files left out whatever the explorer shows: in a git
+	* repository, what `git ls-files --cached --others --exclude-standard`
+	* reports (so .gitignore is respected) plus the files of submodules and
+	* nested repositories; otherwise every non-hidden file outside `.git`,
+	* `node_modules`, `target` and similar directories. Either way, files
+	* matched by `file_explorer.custom_ignore_patterns` are left out.
 	* Open buffers with dirty edits are searched in-memory.
 	*/
 	grepProject(pattern: string, fixedString: boolean | null, caseSensitive: boolean | null, maxResults: number | null, wholeWords: boolean | null): Promise<GrepMatch[]>;
@@ -4867,7 +8444,8 @@ interface EditorAPI {
 	* Begin a streaming project-wide search and return a `SearchHandle`.
 	* The producer (host) writes matches at full speed into shared state;
 	* the consumer drains via `handle.take()` at its own cadence. Call
-	* `handle.cancel()` to abort.
+	* `handle.cancel()` to abort. Searches the same files as `grepProject`,
+	* or with `bufferId` only that buffer, as it is.
 	*/
 	beginSearch(pattern: string, opts?: {
 		fixedString?: boolean;
@@ -4876,19 +8454,73 @@ interface EditorAPI {
 		wholeWords?: boolean;
 		sourceBufferId?: number;
 		fileGlob?: string;
+		bufferId?: number;
 	}): SearchHandle;
+	/**
+	* Search one buffer as it is now, unsaved edits included, with the
+	* editor's own search — the one Ctrl+F and `beginSearch` use. Resolves
+	* with its matches in order: each with its byte offset and length, its
+	* 1-based line and byte column, and the text of its line. `bufferId` 0
+	* is the active buffer; a buffer of any window (`listBuffers(windowId)`)
+	* can be searched. Every match is found unless `maxResults` is
+	* given; `fixedString` and `caseSensitive` default to true. `cancel()`
+	* stops it, resolving with no matches.
+	*/
+	searchBuffer(bufferId: number, pattern: string, opts?: {
+		fixedString?: boolean;
+		caseSensitive?: boolean;
+		wholeWords?: boolean;
+		maxResults?: number;
+	}): Promise<GrepMatch[]> & {
+		cancel(): void;
+	};
 	/**
 	* Replace matches in a file's buffer (async)
 	* Opens the file if not already in a buffer, applies edits via the buffer model,
 	* and saves. All edits are grouped as a single undo action.
+	* 
+	* Pass `regex` — the search the matches came from — to treat
+	* `replacement` as a template: `$1`, `${name}` and `\n` are expanded
+	* per match. Without it, `replacement` is written as is.
 	*/
-	replaceInFile(filePath: string, matches: number[][], replacement: string, bufferId?: number): Promise<ReplaceResult>;
+	replaceInFile(filePath: string, matches: number[][], replacement: string, bufferId?: number, regex?: {
+		pattern: string;
+		caseSensitive?: boolean;
+		wholeWords?: boolean;
+	}): Promise<ReplaceResult>;
 	/**
 	* Send LSP request (async, returns request_id)
+	* 
+	* Sends an arbitrary LSP request and resolves with the raw JSON response.
+	* 
+	* @param language - Language ID (e.g., "cpp")
+	* @param method - Full LSP method (e.g., "textDocument/switchSourceHeader")
+	* @param params - Request payload, or null for none
 	*/
 	sendLspRequest(language: string, method: string, params: Record<string, unknown> | null): Promise<unknown>;
 	/**
 	* Spawn a background process (async, returns request_id which is also process_id)
+	* 
+	* Unlike `spawnProcess`, which waits for completion, this starts a process
+	* in the background and returns immediately with a handle. Its
+	* `processId` identifies the process; it is the same id that
+	* `onProcessStdout` / `onProcessStderr` payloads carry. The handle is also
+	* a promise that settles with the `BackgroundProcessResult` once the
+	* process exits. Use `handle.kill()` or `killProcess(id)` to terminate the
+	* process later; the promise then settles with `exit_code` -1. Use
+	* `isProcessRunning(id)` to check if it is still running.
+	* 
+	* ```ts
+	* const proc = editor.spawnBackgroundProcess("asciinema", ["rec", "output.cast"]);
+	* // Later...
+	* if (editor.isProcessRunning(proc.processId)) {
+	*   await proc.kill(); // or editor.killProcess(proc.processId)
+	* }
+	* ```
+	* 
+	* @param command - Program name (searched in PATH) or absolute path
+	* @param args - Command arguments (each array element is one argument)
+	* @param cwd - Working directory; omit it to use the editor's working directory
 	*/
 	spawnBackgroundProcess(command: string, args: string[], cwd?: string): ProcessHandle<BackgroundProcessResult>;
 	/**
@@ -4897,6 +8529,14 @@ interface EditorAPI {
 	killBackgroundProcess(processId: number): boolean;
 	/**
 	* Create a new terminal in a split (async, returns TerminalResult)
+	* 
+	* The `TerminalResult` holds the buffer, terminal and split IDs.
+	* 
+	* When `opts.windowId` is set, the terminal attaches to that session's
+	* stashed split tree without diving into it. The user's current view stays
+	* put, and the terminal becomes visible only when the user dives into the
+	* named session. This is how Orchestrator spawns agents into background
+	* worktrees without disturbing the foreground session.
 	*/
 	createTerminal(opts?: CreateTerminalOptions): Promise<TerminalResult>;
 	/**
@@ -4925,11 +8565,24 @@ interface EditorAPI {
 	* state with `done` so the window renders as an ordinary session
 	* again. An empty `label` leaves the displayed name alone.
 	* 
-	* Returns `false` only when the channel to the editor is closed.
+	* Returns `false` only when the editor can no longer take commands (for
+	* example while it shuts down).
 	*/
 	setWindowPreparing(id: number, message: string, label: string | null, failed: boolean, done: boolean): boolean;
 	/**
+	* The visible screen of each terminal open in a window, read from
+	* memory: a terminal's backing file (in `getTerminalDir()`) holds only
+	* the lines that have scrolled off it.
+	* 
+	* @param windowId - The window (from `listWindows()`); defaults to the
+	* active one. An unknown window has no terminals.
+	*/
+	getTerminalScreens(windowId?: number): Promise<TerminalScreen[]>;
+	/**
 	* Send input data to a terminal
+	* 
+	* @param terminalId - The terminal ID (from `TerminalResult`)
+	* @param data - Data to write to the terminal PTY (UTF-8 string, may include escape sequences)
 	*/
 	sendTerminalInput(terminalId: number, data: string): boolean;
 	/**
@@ -4942,7 +8595,8 @@ interface EditorAPI {
 	* window's authority decides delivery; this is the
 	* canonical entry point for "stop everything this window
 	* owns" rather than reaching at the terminal level. Returns
-	* `false` only when the command channel is closed.
+	* `false` only when the editor can no longer take commands (for
+	* example while it shuts down).
 	*/
 	signalWindow(id: number, signal: string): boolean;
 	/**
@@ -5023,6 +8677,96 @@ interface EditorAPI {
 		plugin: string;
 	}>>;
 }
+/** A machine opened with `editor.openMachine`. Closed on `close()` or plugin unload. */
+interface FreshMachine {
+	id: number;
+	/** "linux" | "macos" | "windows" | "other", as the machine reports. */
+	platform: string;
+	home: string;
+	/** The authority's own label, empty for a plain local one. */
+	label: string;
+	walkTree(root: string, options?: WalkTreeOptions): Promise<WalkTreeResult>;
+	readFilePrefixes(requests: {
+		path: string;
+		maxBytes: number;
+	}[]): Promise<FilePrefix[]>;
+	/** Run a command here, without a shell. `stdoutTo` streams stdout into
+	*  that file instead (`stdout` then resolves empty; this computer only).
+	*  Never rejects: a command that could not be started, or a machine that
+	*  is closed or whose window has closed, resolves with `code` -1 and the
+	*  reason in `stderr`. `kill()` stops it here, on an SSH host or in a
+	*  Kubernetes pod; in a container it runs to completion. */
+	run(program: string, args?: string[], cwd?: string, stdoutTo?: string): ProcessHandle<CommandResult>;
+	/** Environment variables, for the names that are set. A remote machine is
+	*  asked with `printenv`; never this computer's values for another machine. */
+	env(names: string[]): Promise<Record<string, string>>;
+	/** Idempotent: closing twice is not an error. */
+	close(): Promise<boolean>;
+}
+interface WalkTreeOptions {
+	/** Directory basenames skipped at every depth. */
+	skipDirs?: string[];
+	includeHidden?: boolean;
+	includeDirs?: boolean;
+	/** Depth below the root; 1 is a direct child. Omitted means unbounded. */
+	maxDepth?: number;
+	maxEntries?: number;
+}
+interface WalkTreeEntry {
+	path: string;
+	/** Path relative to the walk root, "/"-separated on every platform. */
+	rel: string;
+	kind: "file" | "dir" | "symlink";
+	/** Unix timestamp. */
+	mtime: number;
+	size: number;
+}
+interface WalkTreeResult {
+	entries: WalkTreeEntry[];
+	/** True when `maxEntries` stopped the walk early. */
+	truncated: boolean;
+}
+/** One result from `readFilePrefixes`: `text` on success, else `error`. */
+interface FilePrefix {
+	path: string;
+	text?: string;
+	error?: string;
+}
+/** A non-zero `code` resolves rather than rejecting. */
+interface CommandResult {
+	code: number;
+	stdout: string;
+	stderr: string;
+}
+/** Bare shapes bound to machine 0, the active window's own authority. */
+interface EditorAPI {
+	/** Open a machine to read without attaching it to a window.
+	*  `{ kind: "window", window?: number }` borrows a window's own authority
+	*  (the active window's when `window` is omitted): `run` on it runs where
+	*  that window's files are, whichever window is active.
+	*  `{ kind: "ssh" | "kubectl-exec", ... }` connects to a machine nothing is
+	*  attached to; it is read-only, so `run` resolves with `code` -1. Anything else is an
+	*  `AuthorityPayload`, as `setAuthority` takes. */
+	openMachine(spec: {
+		kind: "window";
+		window?: number;
+	} | RemoteAgentTransport | AuthorityPayload): Promise<FreshMachine>;
+	walkTree(root: string, options?: WalkTreeOptions): Promise<WalkTreeResult>;
+	readFilePrefixes(requests: {
+		path: string;
+		maxBytes: number;
+	}[]): Promise<FilePrefix[]>;
+	/** Run a command on the active window's machine, without a shell: a remote
+	*  window runs it there, unlike `spawnHostProcess`. For another window, use
+	*  `run` on the machine `openMachine({ kind: "window", window })` returns.
+	*  `stdoutTo` streams stdout into that file instead (`stdout` then resolves
+	*  empty). Resolves with a non-zero `code` rather than rejecting, and with
+	*  `code` -1 (the reason in `stderr`) when the command could not be
+	*  started; `kill()` stops it, as `run` says. The replacement for
+	*  `spawnProcess`. */
+	runOnTarget(program: string, args?: string[], cwd?: string, stdoutTo?: string): ProcessHandle<CommandResult>;
+	machineEnv(names: string[]): Promise<Record<string, string>>;
+}
 /**
 * Typed overload of `editor.getPluginApi`. When the caller passes a
 * key that some loaded plugin declared in `FreshPluginRegistry`, the
@@ -5096,15 +8840,37 @@ interface HookEventMap {
 	* plugin's own `editor.setSetting(...)` writes.
 	*/
 	config_changed: Record<string, never>;
+	/**
+	* The editor-wide input mode (`editor.setInputMode`) changed — vi, or
+	* another modal-editing plugin, was turned on or off or switched between
+	* its sub-modes. `mode` is the new value (`null` when cleared). A plugin
+	* whose window-scoped editor mode should step aside while an input mode
+	* is on re-checks here, since a window's editor mode outranks it.
+	*/
+	input_mode_changed: {
+		mode: string | null;
+	};
 	// ── buffer lifecycle ─────────────────────────────────────────────────────
 	buffer_activated: {
 		buffer_id: number;
+		window_id: number;
 	};
 	buffer_deactivated: {
 		buffer_id: number;
+		window_id: number;
 	};
 	buffer_closed: {
 		buffer_id: number;
+		window_id: number;
+	};
+	/**
+	* A buffer group closed: its plugin closed it, the user closed its tab,
+	* or a buffer one of its panels named by `bufferId` was closed. Group
+	* ids are per window, so match on `window_id` as well as `group_id`.
+	*/
+	buffer_group_closed: {
+		group_id: number;
+		window_id: number;
 	};
 	// ── file I/O ─────────────────────────────────────────────────────────────
 	before_file_open: {
@@ -5113,14 +8879,17 @@ interface HookEventMap {
 	after_file_open: {
 		path: string;
 		buffer_id: number;
+		window_id: number;
 	};
 	before_file_save: {
 		path: string;
 		buffer_id: number;
+		window_id: number;
 	};
 	after_file_save: {
 		path: string;
 		buffer_id: number;
+		window_id: number;
 	};
 	/**
 	* Fired after a buffer is reloaded from disk: auto-revert picked up an
@@ -5147,11 +8916,13 @@ interface HookEventMap {
 	// ── text edits ───────────────────────────────────────────────────────────
 	before_insert: {
 		buffer_id: number;
+		window_id: number;
 		position: number;
 		text: string;
 	};
 	after_insert: {
 		buffer_id: number;
+		window_id: number;
 		position: number;
 		text: string;
 		affected_start: number;
@@ -5162,11 +8933,13 @@ interface HookEventMap {
 	};
 	before_delete: {
 		buffer_id: number;
+		window_id: number;
 		start: number;
 		end: number;
 	};
 	after_delete: {
 		buffer_id: number;
+		window_id: number;
 		start: number;
 		end: number;
 		deleted_text: string;
@@ -5176,9 +8949,20 @@ interface HookEventMap {
 		end_line: number;
 		lines_removed: number;
 	};
+	/**
+	* Fired after any edit changes a buffer's content — including the bulk
+	* edits (multi-cursor typing, a whole-buffer replace, and the undo or redo
+	* of either) that fire no `after_insert` / `after_delete`. Carries no
+	* positions: it says the buffer changed, so re-read it.
+	*/
+	buffer_modified: {
+		buffer_id: number;
+		window_id: number;
+	};
 	// ── cursor & viewport ────────────────────────────────────────────────────
 	cursor_moved: {
 		buffer_id: number;
+		window_id: number;
 		cursor_id: number;
 		old_position: number;
 		new_position: number;
@@ -5188,6 +8972,7 @@ interface HookEventMap {
 	viewport_changed: {
 		split_id: number;
 		buffer_id: number;
+		window_id: number;
 		top_byte: number;
 		top_line: number | null;
 		width: number;
@@ -5252,10 +9037,10 @@ interface HookEventMap {
 		* Gate decoration work on this, not on
 		* `getBufferInfo(buffer_id).is_composing_in_any_split`. The editor marks
 		* these lines as seen the moment it sends the batch, so the batch is the
-		* only offer they get, while `getBufferInfo` reads a state snapshot
-		* refreshed on the editor thread's own schedule — early in a mode change
-		* it still reports the mode the buffer just left. Gating on the snapshot
-		* therefore drops the first decoration pass at random, leaving the
+		* only offer they get, while `getBufferInfo` reads the editor's cached
+		* state, which the editor refreshes on its own schedule — early in a mode
+		* change it still reports the mode the buffer just left. Gating on
+		* `getBufferInfo` therefore drops the first decoration pass at random, leaving the
 		* document undecorated until an edit or a scroll produces another
 		* batch. */
 		is_composing_in_any_split: boolean;
@@ -5283,19 +9068,30 @@ interface HookEventMap {
 		height: number;
 	};
 	// ── prompts ──────────────────────────────────────────────────────────────
+	/**
+	* The text in a prompt opened with `editor.startPrompt` changed. Fires on
+	* every keystroke, so a plugin can refilter its suggestions.
+	*/
 	prompt_changed: {
 		prompt_type: string;
 		input: string;
 	};
+	/**
+	* The user pressed Enter in a prompt opened with `editor.startPrompt`.
+	* `input` is the chosen suggestion's `value`, or the typed text when no
+	* suggestion is chosen.
+	*/
 	prompt_confirmed: {
 		prompt_type: string;
 		input: string;
 		selected_index: number | null;
 	};
+	/** The user pressed Esc in a prompt opened with `editor.startPrompt`. */
 	prompt_cancelled: {
 		prompt_type: string;
 		input: string;
 	};
+	/** The highlighted suggestion in a prompt changed. */
 	prompt_selection_changed: {
 		prompt_type: string;
 		selected_index: number;
@@ -5335,11 +9131,37 @@ interface HookEventMap {
 			column: number;
 		}[];
 	};
+	/**
+	* A language server sent a request (server to client) with a method the
+	* editor does not handle itself. `params` is a JSON string, or `null`.
+	* The editor answers the server with `null`.
+	*/
 	lsp_server_request: {
 		language: string;
 		method: string;
 		server_command: string;
 		params: string | null;
+	};
+	/**
+	* A server -> client notification whose method the editor does not handle
+	* itself (e.g. clangd's `textDocument/clangd.fileStatus`, `$/memoryUsage`).
+	* Unlike `lsp_server_request`, `params` is the parsed JSON value, not a
+	* string. `server_name` tells apart several servers for one language.
+	*
+	* ```ts
+	* editor.on("lsp/custom_notification", (e) => {
+	*   if (e.method === "textDocument/clangd.fileStatus" && e.params) {
+	*     editor.setStatus(`clangd: ${(e.params as { status: string }).status}`);
+	*   }
+	* });
+	* ```
+	*/
+	"lsp/custom_notification": {
+		language: string;
+		server_name: string;
+		method: string;
+		/** JSON-RPC params: an object or array, or `null` when omitted */
+		params: Record<string, unknown> | unknown[] | null;
 	};
 	lsp_server_error: {
 		language: string;
@@ -5353,7 +9175,21 @@ interface HookEventMap {
 		missing_servers: string[];
 		user_dismissed: boolean;
 	};
+	/**
+	* An LSP navigation resolved to a URI whose scheme this plugin claimed
+	* with `registerLspUriScheme`. `line` and `character` are 0-indexed, as
+	* the server sent them.
+	*/
+	lsp_open_external_uri: {
+		uri: string;
+		scheme: string;
+		line: number;
+		character: number;
+		language: string;
+		server_name: string;
+	};
 	// ── UI events ────────────────────────────────────────────────────────────
+	/** The user chose an action in a popup opened with `editor.showActionPopup`. */
 	action_popup_result: {
 		popup_id: string;
 		action_id: string;
@@ -5386,40 +9222,91 @@ interface HookEventMap {
 			action: string;
 		}[];
 	};
-	// ── PTY terminals (see crates/fresh-core/src/hooks.rs) ───────────────────
-	// `window_id` is the editor window owning the terminal (== session id),
-	// so a plugin can attribute output to a session: output from ANY terminal
-	// in the window counts, and it fires on every PTY read (in-place redraws
-	// and carriage-return progress bars register, not just newlines).
+	// ── terminals ────────────────────────────────────────────────────────────
+	// Payloads match crates/fresh-core/src/hooks.rs.
+	/**
+	* A terminal produced output. Fires on every read from the terminal, so
+	* in-place redraws and progress bars count, not only new lines.
+	* `window_id` is the window that owns the terminal, so a plugin can tell
+	* which session the output belongs to.
+	*/
 	terminal_output: {
 		terminal_id: number;
 		window_id: number;
 		last_line: string;
+		/** The terminal's tab title; empty until it has a meaningful one. */
+		terminal_title: string;
+		/** The last OSC 133 / OSC 9;4 activity marker: `true` while a command
+		*  runs, `false` once it has finished, `null` if the program never
+		*  emitted one. */
+		osc_activity: boolean | null;
 	};
+	/** A terminal's process exited. `exit_code` is `null` when a signal ended it. */
 	terminal_exit: {
 		terminal_id: number;
 		window_id: number;
 		exit_code: number | null;
 	};
-	// ── filesystem watching (watchPath plugin API) ────────────────────────────
+	// ── file watching ────────────────────────────────────────────────────────
+	/** A path watched with `editor.watchPath` changed. */
 	path_changed: {
 		handle: number;
 		path: string;
 		/** "modify" | "create" | "delete" | "rename" | "other" */
 		kind: string;
 	};
-	// ── editor sessions (Orchestrator; see orchestrator-sessions-design.md) ────────
+	// ── windows ──────────────────────────────────────────────────────────────
+	// A window is what the Orchestrator shows as a session. See
+	// docs/internal/orchestrator-sessions-design.md.
+	/**
+	* A window (an Orchestrator session) was created, by `editor.createWindow`
+	* or when sessions are restored at startup.
+	*/
 	window_created: {
 		id: number;
 		label: string;
 		root: string;
 	};
+	/** A window was closed. */
 	window_closed: {
 		id: number;
 	};
+	/** The active window changed, once the switch has finished. */
 	active_window_changed: {
 		previous_id: number | null;
 		active_id: number;
+	};
+	/**
+	* What the user is looking at changed: the active buffer of the active
+	* window is a different `(window, buffer)` than before. The one hook to
+	* subscribe to for "the active buffer" — it fires for a tab switch, a
+	* split focus, an open, a window dive and a workspace restore alike,
+	* after `active_window_changed` / `buffer_activated` for the same change.
+	* `reason` is `"window"` (a window switch), `"buffer"` (a different
+	* buffer in the same window) or `"open"` (the same buffer re-pointed at
+	* another file in place).
+	*/
+	active_buffer_changed: {
+		window_id: number;
+		buffer_id: number;
+		previous: {
+			window_id: number;
+			buffer_id: number;
+		} | null;
+		reason: string;
+	};
+	/**
+	* Which chrome region holds the keyboard changed: `"editor"` (a pane),
+	* `"explorer"` (the file tree), `"dock"`, or `"section"` (a sidebar
+	* section, named by `plugin` and `panel_id`). Fires once per change, so
+	* a plugin can answer "does the pane have the keyboard?" without
+	* inferring it from its own focus events.
+	*/
+	chrome_focus_changed: {
+		window_id: number;
+		region: string;
+		plugin: string | null;
+		panel_id: number | null;
 	};
 	// ── widget runtime ───────────────────────────────────────────────────────
 	/**
@@ -5436,14 +9323,21 @@ interface HookEventMap {
 	* widget spec node, or empty when the spec did not assign one).
 	*
 	* `event_type` and `payload` shapes:
+	*   * Text field: `event_type = "change"`, `payload = { value, cursorByte }`.
 	*   * Toggle: `event_type = "toggle"`, `payload = { checked: <new> }`.
 	*   * Button: `event_type = "activate"`, `payload = {}`.
+	*   * Esc, a click outside, or the `[×]` of a closable panel:
+	*     `event_type = "cancel"`. The host has already unmounted the panel.
 	*/
 	widget_event: {
+		window_id: number;
 		panel_id: number;
 		widget_key: string;
 		event_type: string;
 		payload: Record<string, unknown>;
+		/** The widget that holds the panel's focus now, after the event
+		*  (`""` for none) — the host's fact; see `getPanelFocusKey`. */
+		focus_key: string;
 	};
 }
 /**
@@ -5468,7 +9362,27 @@ interface EditorAPI {
 	off<K extends keyof HookEventMap>(eventName: K, handlerName: string): void;
 	/**
 	* Create a buffer group: multiple panels appearing as one tab.
-	* This is an async runtime binding (not a direct #[qjs] method).
+	*
+	* `layout` is a JSON string. A leaf is `{type: "scrollable", id}` or
+	* `{type: "fixed", id, height}`; `{type: "split", direction: "h" | "v",
+	* ratio, first, second}` arranges two of them, `"h"` side by side.
+	*
+	* A leaf gets a new read-only panel buffer, which the group owns and
+	* closes with itself. A leaf with `bufferId` shows that existing buffer
+	* instead (a file the user has open, say), and it stays an ordinary
+	* buffer: editable, in its tabs, and left open when the group closes.
+	* Each panel has its own view of it, so two panels can show one file in
+	* different view modes. Closing the buffer closes the group.
+	*
+	* A scrollable leaf with `path` shows that file: the buffer that has it
+	* open, as for `bufferId`, or else one the group opens without a tab.
+	* Such a buffer is an ordinary file buffer otherwise (the quit prompt and
+	* hot exit cover it); closing the group closes it if it has no unsaved
+	* changes, and gives it a tab in the group's pane if it has.
+	*
+	* The result names each panel's buffer (`panels`) and split
+	* (`panelSplits`, for `createScrollSyncGroup`, `setLineWrap` and
+	* `setLayoutHints`). Group ids are per window.
 	*/
 	createBufferGroup(name: string, mode: string, layout: unknown): Promise<BufferGroupResult>;
 }

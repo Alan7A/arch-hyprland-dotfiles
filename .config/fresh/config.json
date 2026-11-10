@@ -23,6 +23,11 @@
         "arrowKeys": true,
         "searchWordUnderCursor": true
       }
+    },
+    "orchestrator": {
+      "settings": {
+        "autoOpenDock": "never"
+      }
     }
   }
 }
