@@ -4,12 +4,8 @@
 
 hl.permission("/usr/(bin|local/bin)/hyprpm", "plugin", "allow")
 
-local function toggle_hymission()
-  -- Hyprland 0.55 docs do not currently document plugin dispatchers.
-  -- If hymission exposes a Lua dispatcher namespace, this keeps the old bind active.
-  if hl.dsp.hymission and hl.dsp.hymission.toggle then
-    hl.dispatch(hl.dsp.hymission.toggle())
-  end
+if hl.plugin and hl.plugin.hymission then
+  hl.bind("SUPER + TAB", hl.plugin.hymission.toggle)
 end
 
 hl.bind("SUPER + TAB", hl.plugin.hymission.toggle)

@@ -3,8 +3,13 @@
 ----------------------------
 
 hl.workspace_rule({ workspace = "3", monitor = "DP-1", default = true })
-hl.workspace_rule({ workspace = "special:tidal", on_created_empty = "sone" })
 hl.workspace_rule({ workspace = "2", layout = "scrolling" })
+
+hl.on("workspace.created", function(workspace)
+  if workspace.name == "special:tidal" and workspace.is_empty then
+    hl.exec_cmd("sone", { workspace = "special:tidal silent" })
+  end
+end)
 
 hl.window_rule({ float = true, match = { title = "Mission Center" } })
 hl.window_rule({ float = true, match = { title = "Smile" } })
