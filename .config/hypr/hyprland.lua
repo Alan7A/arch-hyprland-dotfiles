@@ -22,8 +22,6 @@ require("configs.keybindings")
 require("configs.lookAndFeel")
 require("configs.input")
 require("configs.rules")
--- require("configs.plugins")
-require("bindings")
 
 -- For Noctalia Color templates
 require("noctalia").apply_theme()

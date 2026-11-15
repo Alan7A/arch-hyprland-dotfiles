@@ -26,6 +26,7 @@ My personal Arch Linux + Hyprland setup. This repository contains my versioned d
 | **Window Manager** | `hyprland` and ecosystem (`hyprpicker`, `hyprshot`, `hyprlock`, `hypridle`, `hyprpaper`, `hyprcursor`, `hyprsunset`, `hyprpolkitagent`, `xdg-desktop-portal-hyprland`, `hyprqt6engine`) |
 | **Terminal & Shell** | `kitty`, `zsh`, `oh-my-zsh`, `fresh-editor-bin`, `paru`, `quickshell`, `noctalia-shell` |
 | **Application Launcher** | `vicinae` |
+| **File Managers** | `skwir-bin` (default), `yazi` (Super+F in Kitty) |
 | **System Utilities** | [omasnap](https://github.com/tobi/omasnap), `fastfetch`, `playerctl`, `solaar`, `kdeconnect`, `nautilus-admin-gtk4`, `nautilus-image-converter`, `nautilus-open-any-terminal`  |
 | **Appearance** | `breezex-cursor-theme`, `numix-circle-icon-theme-git`, `ttf-fira-sans`, `gtk-engine-murrine`, `nwg-look`, `qt5-wayland`, `ttf-cascadia-mono-nerd`  |
 | **Miscellaneous** | `stow` |    
@@ -79,6 +80,7 @@ paru -S --noconfirm \
   eza \
   kdeconnect \
   yazi \
+  skwir-bin \
   7zip \
   resvg \
   cava \

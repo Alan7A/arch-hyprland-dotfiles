@@ -42,6 +42,9 @@
             },
             "jshell-java-openjdk": {
                "enabled": false
+            },
+            "org.skwir.skwir": {
+               "alias": "Files"
             }
          }
       },
